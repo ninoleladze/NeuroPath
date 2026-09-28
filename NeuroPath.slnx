@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="NeuroPath.API/NeuroPath.API.csproj" />
+  <Project Path="NeuroPath.Core/NeuroPath.Core.csproj" />
+  <Project Path="NeuroPath.Data/NeuroPath.Data.csproj" />
+</Solution>

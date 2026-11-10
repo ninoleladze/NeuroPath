@@ -264,3 +264,5 @@ static string IpKey(HttpContext context) => $"ip:{context.Connection.RemoteIpAdd
 
 static string UserOrIpKey(HttpContext context)
     => context.User.FindFirstValue(ClaimTypes.NameIdentifier) is { Length: > 0 } userId ? $"user:{userId}" : IpKey(context);
+
+public partial class Program { }

@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.5" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.5" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
@@ -23,6 +24,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\NeuroPath.API\NeuroPath.API.csproj" />
     <ProjectReference Include="..\NeuroPath.Core\NeuroPath.Core.csproj" />
     <ProjectReference Include="..\NeuroPath.Data\NeuroPath.Data.csproj" />
   </ItemGroup>

@@ -21,6 +21,7 @@ public class AuthService : IAuthService
 {
     private static readonly TimeSpan VerificationTokenLifetime = TimeSpan.FromHours(24);
     private static readonly TimeSpan PasswordResetTokenLifetime = TimeSpan.FromHours(1);
+    private static readonly TimeSpan RefreshReuseGracePeriod = TimeSpan.FromSeconds(20);
 
     private readonly UserManager<User> _userManager;
     private readonly JwtSettings _jwt;
@@ -92,31 +93,47 @@ public class AuthService : IAuthService
         user.LastLoginAt = DateTime.UtcNow;
         await _userManager.UpdateAsync(user);
 
-        return await IssueTokensAsync(user, ipAddress, replacing: null);
+        return await IssueTokensAsync(user, ipAddress, NewRefreshToken());
     }
 
     public async Task<AuthResponseDto> RefreshAsync(string refreshToken, string? ipAddress)
     {
+        var now = DateTime.UtcNow;
         var hash = TokenHasher.Hash(refreshToken);
-        var stored = await _db.RefreshTokens.Include(t => t.User).FirstOrDefaultAsync(t => t.TokenHash == hash)
+        var stored = await _db.RefreshTokens.AsNoTracking().FirstOrDefaultAsync(t => t.TokenHash == hash)
             ?? throw new UnauthorizedAccessException("Invalid refresh token.");
 
-        if (stored.RevokedAt != null)
-        {
-            await RevokeAllRefreshTokensAsync(stored.UserId);
-            await _userManager.UpdateSecurityStampAsync(stored.User);
-            _logger.LogWarning("Refresh token reuse detected for user {UserId}; all sessions were revoked.", stored.UserId);
-            throw new UnauthorizedAccessException("Invalid refresh token.");
-        }
-
-        if (stored.ExpiresAt <= DateTime.UtcNow)
+        if (stored.ExpiresAt <= now)
             throw new UnauthorizedAccessException("Refresh token has expired.");
 
-        var user = stored.User;
+        var user = await _userManager.FindByIdAsync(stored.UserId)
+            ?? throw new UnauthorizedAccessException("Invalid refresh token.");
         if (user.IsBlocked || !user.IsActive)
             throw new UnauthorizedAccessException("Account is not available.");
 
-        return await IssueTokensAsync(user, ipAddress, replacing: stored);
+        var next = NewRefreshToken();
+
+        if (stored.RevokedAt == null)
+        {
+            var claimed = await _db.RefreshTokens
+                .Where(t => t.Id == stored.Id && t.RevokedAt == null)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(t => t.RevokedAt, now)
+                    .SetProperty(t => t.ReplacedByTokenHash, next.Hash));
+            if (claimed == 1)
+                return await IssueTokensAsync(user, ipAddress, next);
+
+            stored = await _db.RefreshTokens.AsNoTracking().FirstAsync(t => t.Id == stored.Id);
+        }
+
+        var rotatedMomentsAgo = stored.ReplacedByTokenHash != null && stored.RevokedAt >= now - RefreshReuseGracePeriod;
+        if (rotatedMomentsAgo)
+            return await IssueTokensAsync(user, ipAddress, next);
+
+        await RevokeAllRefreshTokensAsync(user.Id);
+        await _userManager.UpdateSecurityStampAsync(user);
+        _logger.LogWarning("Refresh token reuse detected for user {UserId}; all sessions were revoked.", user.Id);
+        throw new UnauthorizedAccessException("Invalid refresh token.");
     }
 
     public async Task<bool> VerifyEmailAsync(string token)
@@ -219,24 +236,21 @@ public class AuthService : IAuthService
         if (user != null) await _userManager.UpdateSecurityStampAsync(user);
     }
 
-    private async Task<AuthResponseDto> IssueTokensAsync(User user, string? ipAddress, RefreshToken? replacing)
+    private static (string Token, string Hash) NewRefreshToken()
+    {
+        var token = TokenHasher.NewToken();
+        return (token, TokenHasher.Hash(token));
+    }
+
+    private async Task<AuthResponseDto> IssueTokensAsync(User user, string? ipAddress, (string Token, string Hash) refresh)
     {
         var roles = await _userManager.GetRolesAsync(user);
         var (accessToken, expiresAt) = CreateAccessToken(user, roles);
 
-        var refreshToken = TokenHasher.NewToken();
-        var refreshHash = TokenHasher.Hash(refreshToken);
-
-        if (replacing != null)
-        {
-            replacing.RevokedAt = DateTime.UtcNow;
-            replacing.ReplacedByTokenHash = refreshHash;
-        }
-
         _db.RefreshTokens.Add(new RefreshToken
         {
             UserId = user.Id,
-            TokenHash = refreshHash,
+            TokenHash = refresh.Hash,
             ExpiresAt = DateTime.UtcNow.AddDays(_jwt.RefreshTokenExpirationDays),
             CreatedByIp = ipAddress
         });
@@ -246,7 +260,7 @@ public class AuthService : IAuthService
         {
             AccessToken = accessToken,
             AccessTokenExpiresAt = expiresAt,
-            RefreshToken = refreshToken,
+            RefreshToken = refresh.Token,
             UserId = user.Id,
             UserName = user.UserName,
             Email = user.Email,

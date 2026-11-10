@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using NeuroPath.Core.Exceptions;
 
@@ -51,7 +52,8 @@ public class ExceptionHandlingMiddleware
             ConflictException => Problem(StatusCodes.Status409Conflict, "Conflict", exception.Message),
             UnauthorizedAccessException => Problem(StatusCodes.Status401Unauthorized, "Unauthorized", exception.Message),
             DbUpdateConcurrencyException => Problem(StatusCodes.Status409Conflict, "Conflict", "The data was changed by another request. Please retry."),
-            DbUpdateException => Problem(StatusCodes.Status409Conflict, "Conflict", "The request conflicts with existing data."),
+            DbUpdateException db when IsConstraintViolation(db) => Problem(StatusCodes.Status409Conflict, "Conflict", "The request conflicts with existing data."),
+            DbUpdateException db when IsValueTooLong(db) => Problem(StatusCodes.Status400BadRequest, "Request could not be processed", "One of the values is longer than allowed."),
             _ => Problem(StatusCodes.Status500InternalServerError, "Server error", "An unexpected error occurred.")
         };
 
@@ -66,6 +68,15 @@ public class ExceptionHandlingMiddleware
         context.Response.StatusCode = problem.Status ?? StatusCodes.Status500InternalServerError;
         await context.Response.WriteAsJsonAsync(problem, problem.GetType(), options: null, contentType: "application/problem+json");
     }
+
+    private static readonly int[] ConstraintErrorNumbers = { 547, 2601, 2627 };
+    private static readonly int[] TruncationErrorNumbers = { 2628, 8152 };
+
+    private static bool IsConstraintViolation(DbUpdateException exception)
+        => exception.InnerException is SqlException sql && ConstraintErrorNumbers.Contains(sql.Number);
+
+    private static bool IsValueTooLong(DbUpdateException exception)
+        => exception.InnerException is SqlException sql && TruncationErrorNumbers.Contains(sql.Number);
 
     private static ProblemDetails Problem(int status, string title, string detail)
         => new() { Status = status, Title = title, Detail = detail };

@@ -6,4 +6,5 @@ public interface IMaintenanceService
     Task RefreshLeaderboardsAsync(CancellationToken cancellationToken = default);
     Task<int> TakeDueSnapshotsAsync(CancellationToken cancellationToken = default);
     Task<int> PurgeExpiredTokensAsync(CancellationToken cancellationToken = default);
+    Task<int> ResetBrokenStreaksAsync(CancellationToken cancellationToken = default);
 }

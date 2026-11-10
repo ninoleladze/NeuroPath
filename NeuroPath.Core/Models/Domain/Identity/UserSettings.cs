@@ -12,6 +12,7 @@ public class UserSettings
     public bool WeeklySummary { get; set; } = true;
     public string ProfileVisibility { get; set; } = "public";
     public bool ShowOnLeaderboard { get; set; } = true;
+    public string TimeZoneId { get; set; } = "UTC";
 
     public User User { get; set; } = null!;
 }

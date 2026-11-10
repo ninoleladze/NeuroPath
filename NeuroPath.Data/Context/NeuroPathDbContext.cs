@@ -167,6 +167,8 @@ public class NeuroPathDbContext : IdentityDbContext<User, Role, string>, INeuroP
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         configurationBuilder.Properties<decimal>().HavePrecision(18, 2);
+        configurationBuilder.Properties<DateTime>().HaveConversion<UtcDateTimeConverter>();
+        configurationBuilder.Properties<DateTime?>().HaveConversion<UtcDateTimeConverter>();
     }
 
     protected override void OnModelCreating(ModelBuilder builder)

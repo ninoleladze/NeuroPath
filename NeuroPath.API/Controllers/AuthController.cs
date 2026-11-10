@@ -7,7 +7,6 @@ using NeuroPath.Core.Models.DTOs.Auth;
 namespace NeuroPath.API.Controllers;
 
 [Route("api/auth")]
-[EnableRateLimiting("auth")]
 public class AuthController : ApiControllerBase
 {
     private readonly IAuthService _auth;
@@ -16,11 +15,13 @@ public class AuthController : ApiControllerBase
 
     [HttpPost("register")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     public async Task<ActionResult<AuthResponseDto>> Register(RegisterDto dto)
         => Ok(await _auth.RegisterAsync(dto, ClientIp));
 
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     public async Task<ActionResult<AuthResponseDto>> Login(LoginDto dto)
         => Ok(await _auth.LoginAsync(dto, ClientIp));
 
@@ -31,11 +32,13 @@ public class AuthController : ApiControllerBase
 
     [HttpPost("verify-email")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> VerifyEmail(VerifyEmailDto dto)
         => await _auth.VerifyEmailAsync(dto.Token) ? NoContent() : BadRequest(new ProblemDetails { Title = "Invalid or expired token." });
 
     [HttpPost("resend-verification")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> ResendVerification(ResendVerificationDto dto)
     {
         await _auth.ResendVerificationEmailAsync(dto.Email);
@@ -44,6 +47,7 @@ public class AuthController : ApiControllerBase
 
     [HttpPost("forgot-password")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> ForgotPassword(ForgotPasswordDto dto)
     {
         await _auth.ForgotPasswordAsync(dto.Email, ClientIp);
@@ -52,6 +56,7 @@ public class AuthController : ApiControllerBase
 
     [HttpPost("reset-password")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> ResetPassword(ResetPasswordDto dto)
         => await _auth.ResetPasswordAsync(dto) ? NoContent() : BadRequest(new ProblemDetails { Title = "Invalid or expired token." });
 

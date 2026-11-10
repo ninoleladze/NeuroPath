@@ -1,9 +1,11 @@
+using System.Net;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
@@ -105,15 +107,26 @@ builder.Services.Configure<CacheSettings>(builder.Configuration.GetSection("Cach
 builder.Services.Configure<RateLimitSettings>(builder.Configuration.GetSection("RateLimitSettings"));
 builder.Services.Configure<BackgroundJobSettings>(builder.Configuration.GetSection("BackgroundJobs"));
 builder.Services.Configure<FileUploadSettings>(builder.Configuration.GetSection("FileUploadSettings"));
+builder.Services.Configure<GamificationSettings>(builder.Configuration.GetSection("Gamification"));
 builder.Services.PostConfigure<FileUploadSettings>(settings =>
     settings.RootPath = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, settings.UploadPath)));
 builder.Services.AddMemoryCache();
+
+var forwarding = builder.Configuration.GetSection("ForwardedHeaders");
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    foreach (var proxy in forwarding.GetSection("KnownProxies").Get<string[]>() ?? Array.Empty<string>())
+        options.KnownProxies.Add(IPAddress.Parse(proxy));
+    foreach (var network in forwarding.GetSection("KnownNetworks").Get<string[]>() ?? Array.Empty<string>())
+        options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(network));
+});
 
 var rateLimits = builder.Configuration.GetSection("RateLimitSettings").Get<RateLimitSettings>() ?? new RateLimitSettings();
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.AddPolicy("global", context => RateLimitPartition.GetFixedWindowLimiter(UserOrIpKey(context), _ => new FixedWindowRateLimiterOptions
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context => RateLimitPartition.GetFixedWindowLimiter(UserOrIpKey(context), _ => new FixedWindowRateLimiterOptions
     {
         PermitLimit = rateLimits.PermitLimit,
         Window = TimeSpan.FromSeconds(rateLimits.WindowSeconds),
@@ -202,6 +215,7 @@ builder.Services.AddCors(options => options.AddPolicy("ClientApp", policy =>
 
 var app = builder.Build();
 
+app.UseForwardedHeaders();
 app.UseSerilogRequestLogging();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
@@ -236,7 +250,7 @@ app.UseRateLimiter();
 app.UseAuthorization();
 
 app.MapHealthChecks("/health");
-app.MapControllers().RequireRateLimiting("global");
+app.MapControllers();
 
 var seedSection = app.Configuration.GetSection("Seed");
 await app.Services.SeedAsync(new SeedOptions(

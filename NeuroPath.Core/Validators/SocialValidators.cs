@@ -68,6 +68,8 @@ public class UpdateSettingsDtoValidator : AbstractValidator<UpdateSettingsDto>
         RuleFor(x => x.Theme).Must(t => Themes.Contains(t)).WithMessage($"Theme must be one of: {string.Join(", ", Themes)}.");
         RuleFor(x => x.ProfileVisibility).Must(v => Visibilities.Contains(v))
             .WithMessage($"Profile visibility must be one of: {string.Join(", ", Visibilities)}.");
+        RuleFor(x => x.TimeZoneId).NotEmpty().MaximumLength(64).Must(UserTime.IsValidTimeZone)
+            .WithMessage("Time zone must be an IANA or Windows time zone id, for example 'Asia/Tbilisi'.");
     }
 }
 

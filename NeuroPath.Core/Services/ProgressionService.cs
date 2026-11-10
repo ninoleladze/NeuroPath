@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using NeuroPath.Core.Common;
 using NeuroPath.Core.Enums;
 using NeuroPath.Core.Interfaces;
 using NeuroPath.Core.Models.Domain.Exercises;
@@ -34,18 +35,29 @@ public class ProgressionService : IProgressionService
         });
     }
 
+    public async Task<TimeZoneInfo> GetTimeZoneAsync(string userId)
+    {
+        var timeZoneId = await _db.UserSettings
+            .Where(s => s.UserId == userId)
+            .Select(s => s.TimeZoneId)
+            .FirstOrDefaultAsync();
+        return UserTime.Resolve(timeZoneId);
+    }
+
     public async Task RegisterActivityAsync(string userId)
     {
-        var today = DateTime.UtcNow.Date;
+        var now = DateTime.UtcNow;
+        var zone = await GetTimeZoneAsync(userId);
+        var today = UserTime.LocalDate(now, zone);
         var streak = await _db.Streaks.FirstOrDefaultAsync(s => s.UserId == userId);
 
         if (streak == null)
         {
-            _db.Streaks.Add(new Streak { UserId = userId, CurrentStreak = 1, LongestStreak = 1, TotalActiveDays = 1, LastActivityDate = DateTime.UtcNow });
+            _db.Streaks.Add(new Streak { UserId = userId, CurrentStreak = 1, LongestStreak = 1, TotalActiveDays = 1, LastActivityDate = now });
             return;
         }
 
-        var lastDay = streak.LastActivityDate.Date;
+        var lastDay = UserTime.LocalDate(streak.LastActivityDate, zone);
 
         if (streak.CurrentStreak == 0)
         {
@@ -74,7 +86,7 @@ public class ProgressionService : IProgressionService
         }
 
         streak.LongestStreak = Math.Max(streak.LongestStreak, streak.CurrentStreak);
-        streak.LastActivityDate = DateTime.UtcNow;
+        streak.LastActivityDate = now;
     }
 
     public async Task ApplyBrainAreaProgressAsync(string userId, Exercise exercise, int points, decimal accuracy)

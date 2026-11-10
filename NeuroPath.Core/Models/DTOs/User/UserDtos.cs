@@ -51,6 +51,7 @@ public class UserSettingsDto
     public bool WeeklySummary { get; set; }
     public string ProfileVisibility { get; set; } = "public";
     public bool ShowOnLeaderboard { get; set; }
+    public string TimeZoneId { get; set; } = "UTC";
 }
 
 public class UpdateSettingsDto : UserSettingsDto { }

@@ -74,6 +74,24 @@ public static class TestData
         return quiz;
     }
 
+    public static async Task<Exercise> AddExerciseAsync(NeuroPathDbContext db, int points = 100, decimal multiplier = 1.0m, int durationMinutes = 10)
+    {
+        var exercise = new Exercise
+        {
+            Title = $"Exercise-{Guid.NewGuid():N}",
+            Description = "Test exercise",
+            Instructions = "Do it",
+            DurationMinutes = durationMinutes,
+            Points = points,
+            IsActive = true,
+            ExerciseCategory = new ExerciseCategory { Name = $"Category-{Guid.NewGuid():N}" },
+            DifficultyLevel = new DifficultyLevel { Name = $"Level-{Guid.NewGuid():N}", Level = Random.Shared.Next(1000, 1_000_000), PointMultiplier = multiplier }
+        };
+        db.Exercises.Add(exercise);
+        await db.SaveChangesAsync();
+        return exercise;
+    }
+
     public static int CorrectAnswerId(QuizQuestion question) => question.Answers.Single(a => a.IsCorrect).Id;
 
     public static int WrongAnswerId(QuizQuestion question) => question.Answers.Single(a => !a.IsCorrect).Id;

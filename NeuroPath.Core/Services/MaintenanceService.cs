@@ -97,4 +97,12 @@ public class MaintenanceService : IMaintenanceService
 
         return refresh + verification + reset;
     }
+
+    public async Task<int> ResetBrokenStreaksAsync(CancellationToken cancellationToken = default)
+    {
+        var cutoff = DateTime.UtcNow.AddDays(-Math.Max(3, _settings.StreakResetAfterDays));
+        return await _db.Streaks
+            .Where(s => s.CurrentStreak > 0 && s.LastActivityDate < cutoff)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.CurrentStreak, 0), cancellationToken);
+    }
 }

@@ -99,6 +99,7 @@ public class AchievementService : IAchievementService
         if (stats == null) return new List<UserAchievementDto>();
 
         var awarded = new List<UserAchievementDto>();
+        var pending = new List<object>();
         await using var transaction = await _db.Database.BeginTransactionAsync();
 
         foreach (var achievement in candidates)
@@ -113,8 +114,8 @@ public class AchievementService : IAchievementService
             if (!qualifies) continue;
 
             var earnedAt = DateTime.UtcNow;
-            _db.UserAchievements.Add(new UserAchievement { UserId = userId, AchievementId = achievement.Id, EarnedAt = earnedAt });
-            _db.Notifications.Add(new Notification
+            var userAchievement = new UserAchievement { UserId = userId, AchievementId = achievement.Id, EarnedAt = earnedAt };
+            var notification = new Notification
             {
                 UserId = userId,
                 Title = "Achievement unlocked",
@@ -122,7 +123,11 @@ public class AchievementService : IAchievementService
                 Type = NotificationType.AchievementUnlocked,
                 ReferenceId = achievement.Id,
                 ReferenceType = nameof(Achievement)
-            });
+            };
+            _db.UserAchievements.Add(userAchievement);
+            _db.Notifications.Add(notification);
+            pending.Add(userAchievement);
+            pending.Add(notification);
             await _progression.AwardPointsAsync(userId, achievement.BonusPoints, PointSource.Achievement, achievement.Id);
 
             awarded.Add(new UserAchievementDto
@@ -135,8 +140,18 @@ public class AchievementService : IAchievementService
             });
         }
 
-        await _db.SaveChangesAsync();
-        await transaction.CommitAsync();
+        try
+        {
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+        }
+        catch (DbUpdateException)
+        {
+            await transaction.RollbackAsync();
+            foreach (var entity in pending)
+                _db.Entry(entity).State = EntityState.Detached;
+            return new List<UserAchievementDto>();
+        }
         return awarded;
     }
 

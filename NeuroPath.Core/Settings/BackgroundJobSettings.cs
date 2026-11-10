@@ -8,4 +8,5 @@ public class BackgroundJobSettings
     public int ActiveUserWindowDays { get; set; } = 30;
     public int SnapshotBatchSize { get; set; } = 200;
     public int RevokedTokenRetentionDays { get; set; } = 30;
+    public int StreakResetAfterDays { get; set; } = 3;
 }

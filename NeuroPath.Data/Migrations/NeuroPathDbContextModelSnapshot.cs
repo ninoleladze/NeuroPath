@@ -2519,7 +2519,9 @@ namespace NeuroPath.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("NormalizedEmail")
-                        .HasDatabaseName("EmailIndex");
+                        .IsUnique()
+                        .HasDatabaseName("EmailIndex")
+                        .HasFilter("[NormalizedEmail] IS NOT NULL");
 
                     b.HasIndex("NormalizedUserName")
                         .IsUnique()
@@ -2626,6 +2628,13 @@ namespace NeuroPath.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("TimeZoneId")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasDefaultValue("UTC");
 
                     b.Property<string>("UserId")
                         .IsRequired()
@@ -2843,6 +2852,10 @@ namespace NeuroPath.Data.Migrations
                     b.HasIndex("QuizId");
 
                     b.HasIndex("UserId", "QuizId");
+
+                    b.HasIndex(new[] { "UserId", "QuizId" }, "IX_UserQuizAttempts_FirstAward")
+                        .IsUnique()
+                        .HasFilter("[PointsAwarded] > 0");
 
                     b.ToTable("UserQuizAttempts");
                 });

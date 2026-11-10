@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using NeuroPath.Core.Common;
 using NeuroPath.Core.Exceptions;
 using NeuroPath.Core.Interfaces;
 using NeuroPath.Core.Models.Domain.Gamification;
@@ -103,17 +104,20 @@ public class ShopService : IShopService
             .ExecuteUpdateAsync(s => s.SetProperty(i => i.IsEquipped, isEquipped)) > 0;
 
     public async Task<StreakDto?> GetStreakAsync(string userId)
-        => await _db.Streaks.AsNoTracking()
-            .Where(s => s.UserId == userId)
-            .Select(s => new StreakDto
-            {
-                CurrentStreak = s.CurrentStreak,
-                LongestStreak = s.LongestStreak,
-                LastActivityDate = s.LastActivityDate,
-                TotalActiveDays = s.TotalActiveDays,
-                StreakFreezeCount = s.StreakFreezeCount
-            })
-            .FirstOrDefaultAsync();
+    {
+        var streak = await _db.Streaks.AsNoTracking().FirstOrDefaultAsync(s => s.UserId == userId);
+        if (streak == null) return null;
+
+        var timeZoneId = await _db.UserSettings.Where(s => s.UserId == userId).Select(s => s.TimeZoneId).FirstOrDefaultAsync();
+        return new StreakDto
+        {
+            CurrentStreak = UserTime.EffectiveStreak(streak, DateTime.UtcNow, UserTime.Resolve(timeZoneId)),
+            LongestStreak = streak.LongestStreak,
+            LastActivityDate = streak.LastActivityDate,
+            TotalActiveDays = streak.TotalActiveDays,
+            StreakFreezeCount = streak.StreakFreezeCount
+        };
+    }
 
     private static void Apply(ShopItem item, SaveShopItemDto dto)
     {

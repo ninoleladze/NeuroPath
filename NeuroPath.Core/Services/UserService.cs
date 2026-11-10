@@ -72,7 +72,8 @@ public class UserService : IUserService
                 StreakReminders = s.StreakReminders,
                 WeeklySummary = s.WeeklySummary,
                 ProfileVisibility = s.ProfileVisibility,
-                ShowOnLeaderboard = s.ShowOnLeaderboard
+                ShowOnLeaderboard = s.ShowOnLeaderboard,
+                TimeZoneId = s.TimeZoneId
             })
             .FirstOrDefaultAsync();
 
@@ -89,6 +90,7 @@ public class UserService : IUserService
         settings.WeeklySummary = dto.WeeklySummary;
         settings.ProfileVisibility = dto.ProfileVisibility;
         settings.ShowOnLeaderboard = dto.ShowOnLeaderboard;
+        settings.TimeZoneId = dto.TimeZoneId;
         await _db.SaveChangesAsync();
         return true;
     }

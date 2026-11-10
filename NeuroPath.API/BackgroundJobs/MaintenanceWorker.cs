@@ -46,6 +46,7 @@ public sealed class MaintenanceWorker : BackgroundService
         await RunStepAsync("refresh leaderboards", async (m, ct) => { await m.RefreshLeaderboardsAsync(ct); return 0; }, stoppingToken);
         await RunStepAsync("take progress snapshots", (m, ct) => m.TakeDueSnapshotsAsync(ct), stoppingToken);
         await RunStepAsync("purge expired tokens", (m, ct) => m.PurgeExpiredTokensAsync(ct), stoppingToken);
+        await RunStepAsync("reset broken streaks", (m, ct) => m.ResetBrokenStreaksAsync(ct), stoppingToken);
     }
 
     private async Task RunStepAsync(string name, Func<IMaintenanceService, CancellationToken, Task<int>> step, CancellationToken stoppingToken)

@@ -10,6 +10,7 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
     {
         builder.Property(u => u.AvatarUrl).HasMaxLength(500);
         builder.HasIndex(u => u.TotalPoints);
+        builder.HasIndex(u => u.NormalizedEmail).HasDatabaseName("EmailIndex").IsUnique().HasFilter("[NormalizedEmail] IS NOT NULL");
     }
 }
 
@@ -46,6 +47,7 @@ public class UserSettingsConfiguration : IEntityTypeConfiguration<UserSettings>
         builder.Property(s => s.Language).HasMaxLength(10);
         builder.Property(s => s.Theme).HasMaxLength(20);
         builder.Property(s => s.ProfileVisibility).HasMaxLength(20);
+        builder.Property(s => s.TimeZoneId).HasMaxLength(64).HasDefaultValue("UTC");
     }
 }
 

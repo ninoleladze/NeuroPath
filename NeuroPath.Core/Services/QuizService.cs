@@ -307,8 +307,9 @@ public class QuizService : IQuizService
             ? (int)Math.Round(score * quiz.DifficultyLevel.PointMultiplier, MidpointRounding.AwayFromZero)
             : 0;
 
-        await using (var transaction = await _db.Database.BeginTransactionAsync())
+        try
         {
+            await using var transaction = await _db.Database.BeginTransactionAsync();
             if (isNewAttempt) _db.UserQuizAttempts.Add(attempt);
             await _progression.AwardPointsAsync(userId, attempt.PointsAwarded, PointSource.Quiz, quiz.Id);
             await _progression.RegisterActivityAsync(userId);
@@ -316,6 +317,10 @@ public class QuizService : IQuizService
                 await _progression.ApplyChallengeProgressAsync(userId, attempt.PointsAwarded, countsAsExercise: false, accuracy: null);
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
+        }
+        catch (DbUpdateException) when (attempt.PointsAwarded > 0)
+        {
+            throw new ConflictException("This quiz was already completed by another request. Refresh your history.");
         }
 
         if (attempt.IsPassed)

@@ -28,6 +28,9 @@ public class UserQuizAttemptConfiguration : IEntityTypeConfiguration<UserQuizAtt
     public void Configure(EntityTypeBuilder<UserQuizAttempt> builder)
     {
         builder.HasIndex(a => new { a.UserId, a.QuizId });
+        builder.HasIndex(a => new { a.UserId, a.QuizId }, "IX_UserQuizAttempts_FirstAward")
+            .IsUnique()
+            .HasFilter("[PointsAwarded] > 0");
     }
 }
 

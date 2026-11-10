@@ -1,10 +1,12 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using NeuroPath.Core.Common;
 using NeuroPath.Core.Enums;
 using NeuroPath.Core.Exceptions;
 using NeuroPath.Core.Interfaces;
 using NeuroPath.Core.Models.Domain.Training;
 using NeuroPath.Core.Models.DTOs.Training;
+using NeuroPath.Core.Settings;
 
 namespace NeuroPath.Core.Services;
 
@@ -13,12 +15,14 @@ public class DailySessionService : IDailySessionService
     private readonly INeuroPathDbContext _db;
     private readonly IProgressionService _progression;
     private readonly IAchievementService _achievements;
+    private readonly GamificationSettings _rules;
 
-    public DailySessionService(INeuroPathDbContext db, IProgressionService progression, IAchievementService achievements)
+    public DailySessionService(INeuroPathDbContext db, IProgressionService progression, IAchievementService achievements, IOptions<GamificationSettings> rules)
     {
         _db = db;
         _progression = progression;
         _achievements = achievements;
+        _rules = rules.Value;
     }
 
     public async Task<List<DailySessionDto>> GetUserSessionsAsync(string userId, int page = 1, int pageSize = 20)
@@ -93,11 +97,15 @@ public class DailySessionService : IDailySessionService
             .FirstOrDefaultAsync(e => e.Id == dto.ExerciseId && e.IsActive)
             ?? throw new NotFoundException("Exercise not found.");
 
+        var minimumSeconds = (int)Math.Floor(exercise.DurationMinutes * 60 * _rules.MinimumDurationFraction);
+        if (dto.DurationSeconds < minimumSeconds)
+            throw new BusinessRuleException($"This exercise cannot be completed in under {minimumSeconds} seconds.");
+
+        var now = DateTime.UtcNow;
         var accuracy = Math.Clamp(dto.AccuracyPercent, 0m, 100m);
         var hintPenalty = exercise.Hints.OrderBy(h => h.HintOrder).Take(Math.Max(0, dto.HintsUsed)).Sum(h => h.PointPenalty);
         var basePoints = (int)Math.Round(exercise.Points * exercise.DifficultyLevel.PointMultiplier * accuracy / 100m, MidpointRounding.AwayFromZero);
-        var points = Math.Max(0, basePoints - hintPenalty);
-        var now = DateTime.UtcNow;
+        var points = await ApplyDailyLimitsAsync(userId, exercise.Id, Math.Max(0, basePoints - hintPenalty), now);
 
         var log = new UserExerciseLog
         {
@@ -160,6 +168,28 @@ public class DailySessionService : IDailySessionService
             SessionTotalPoints = session.TotalPoints,
             SessionTotalExercises = session.TotalExercises
         };
+    }
+
+    private async Task<int> ApplyDailyLimitsAsync(string userId, int exerciseId, int points, DateTime now)
+    {
+        if (points <= 0) return 0;
+
+        var zone = await _progression.GetTimeZoneAsync(userId);
+        var dayStart = UserTime.StartOfLocalDayUtc(now, zone);
+
+        var today = await _db.UserExerciseLogs
+            .Where(l => l.UserId == userId && l.CompletedAt >= dayStart)
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                ScoredRepeats = g.Count(l => l.ExerciseId == exerciseId && l.PointsAwarded > 0),
+                Points = g.Sum(l => l.PointsAwarded)
+            })
+            .FirstOrDefaultAsync();
+
+        if (today == null) return Math.Min(points, _rules.DailyExercisePointCap);
+        if (today.ScoredRepeats >= _rules.MaxScoredRepeatsPerExercisePerDay) return 0;
+        return Math.Clamp(_rules.DailyExercisePointCap - today.Points, 0, points);
     }
 
     public async Task<List<UserExerciseLogDto>> GetUserLogsAsync(string userId, int page = 1, int pageSize = 20)

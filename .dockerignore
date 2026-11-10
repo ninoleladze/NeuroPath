@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+**/logs/
+**/TestResults/
+**/wwwroot/uploads/
+**/*.user
+.vs/
+.git/
+.github/
+.claude/
+NeuroPath.Tests/
+docker-compose.yml
+.env

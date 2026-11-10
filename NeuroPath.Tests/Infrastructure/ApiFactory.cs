@@ -23,8 +23,17 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
 
     private readonly SqliteFileDatabase _database = new();
 
+    public static readonly string UploadRoot = Path.Combine(Path.GetTempPath(), $"neuropath-uploads-{Guid.NewGuid():N}");
+
     static ApiFactory()
     {
+        Environment.SetEnvironmentVariable("FileUploadSettings__UploadPath", UploadRoot);
+        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+        {
+            try { if (Directory.Exists(UploadRoot)) Directory.Delete(UploadRoot, true); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        };
         Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Testing");
         Environment.SetEnvironmentVariable("JwtSettings__SecretKey", "api-test-signing-key-0123456789-abcdefghijklmnopqrstuvwxyz");
         Environment.SetEnvironmentVariable("Seed__AdminEmail", AdminEmail);

@@ -1,0 +1,46 @@
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD in .env}
+    volumes:
+      - sqldata:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q \"SELECT 1\" -b -o /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${API_PORT:-8080}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ConnectionStrings__DefaultConnection: "Server=db,1433;Database=NeuroPathDb;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=true;"
+      JwtSettings__SecretKey: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in .env}
+      Seed__AdminEmail: ${ADMIN_EMAIL:-admin@neuropath.com}
+      Seed__AdminPassword: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      Seed__ApplyMigrations: "true"
+      ClientApp__BaseUrl: ${CLIENT_BASE_URL:-http://localhost:4200}
+      ClientApp__AllowedOrigins__0: ${CLIENT_BASE_URL:-http://localhost:4200}
+      SmtpSettings__Username: ${SMTP_USERNAME:-}
+      SmtpSettings__Password: ${SMTP_PASSWORD:-}
+      SmtpSettings__LogEmailsInsteadOfSending: ${SMTP_LOG_ONLY:-true}
+    volumes:
+      - uploads:/app/wwwroot/uploads
+      - logs:/app/logs
+      - dpkeys:/home/app/.aspnet/DataProtection-Keys
+    restart: unless-stopped
+
+volumes:
+  sqldata:
+  uploads:
+  logs:
+  dpkeys:

@@ -2,15 +2,14 @@ using Microsoft.EntityFrameworkCore;
 using NeuroPath.Core.Interfaces;
 using NeuroPath.Core.Models.Domain.BrainScience;
 using NeuroPath.Core.Models.DTOs.BrainScience;
-using NeuroPath.Data.Context;
 
 namespace NeuroPath.Core.Services;
 
 public class BrainRegionService : IBrainRegionService
 {
-    private readonly NeuroPathDbContext _db;
+    private readonly INeuroPathDbContext _db;
 
-    public BrainRegionService(NeuroPathDbContext db) => _db = db;
+    public BrainRegionService(INeuroPathDbContext db) => _db = db;
 
     public async Task<List<BrainRegionDto>> GetAllAsync()
         => await _db.BrainRegions

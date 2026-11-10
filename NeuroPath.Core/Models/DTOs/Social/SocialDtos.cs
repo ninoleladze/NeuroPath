@@ -73,3 +73,8 @@ public class TeamMemberDto
     public DateTime JoinedAt { get; set; }
     public int ContributedPoints { get; set; }
 }
+
+public class SetTeamRoleDto
+{
+    public TeamRole Role { get; set; }
+}

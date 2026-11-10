@@ -6,6 +6,7 @@ public class UserDto
     public string UserName { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public bool IsActive { get; set; }
+    public bool IsBlocked { get; set; }
     public bool IsEmailVerified { get; set; }
     public string? AvatarUrl { get; set; }
     public int TotalPoints { get; set; }
@@ -66,4 +67,9 @@ public class PublicUserDto
 public class SetRoleDto
 {
     public string Role { get; set; } = string.Empty;
+}
+
+public class SetBlockedDto
+{
+    public bool IsBlocked { get; set; }
 }

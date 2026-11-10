@@ -4,6 +4,7 @@ using NeuroPath.Core.Models.Domain.Assessment;
 using NeuroPath.Core.Models.Domain.Challenges;
 using NeuroPath.Core.Models.Domain.Communication;
 using NeuroPath.Core.Models.Domain.Content;
+using NeuroPath.Core.Models.Domain.Courses;
 using NeuroPath.Core.Models.Domain.Exercises;
 using NeuroPath.Core.Models.Domain.FileManagement;
 using NeuroPath.Core.Models.Domain.Gamification;
@@ -31,6 +32,7 @@ public class User : IdentityUser
     public Streak? Streak { get; set; }
     public ICollection<EmailVerificationToken> EmailVerificationTokens { get; set; } = new List<EmailVerificationToken>();
     public ICollection<PasswordResetToken> PasswordResetTokens { get; set; } = new List<PasswordResetToken>();
+    public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
     public ICollection<UploadedFile> UploadedFiles { get; set; } = new List<UploadedFile>();
     public ICollection<UserExerciseLog> ExerciseLogs { get; set; } = new List<UserExerciseLog>();
     public ICollection<TrainingPlan> TrainingPlans { get; set; } = new List<TrainingPlan>();

@@ -9,7 +9,7 @@ public interface IUserService
     Task<bool> UpdateProfileAsync(string userId, UpdateProfileDto dto);
     Task<UserSettingsDto?> GetSettingsAsync(string userId);
     Task<bool> UpdateSettingsAsync(string userId, UpdateSettingsDto dto);
-    Task<List<UserDto>> GetAllAsync();
-    Task<bool> BlockUserAsync(string userId);
-    Task<bool> SetRoleAsync(string userId, string role);
+    Task<List<UserDto>> GetAllAsync(int page = 1, int pageSize = 20);
+    Task<bool> SetBlockedAsync(string userId, bool isBlocked, string actingAdminId);
+    Task<bool> SetRoleAsync(string userId, string role, string actingAdminId);
 }

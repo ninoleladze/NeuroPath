@@ -9,6 +9,6 @@ public interface ITrainingPlanService
     Task<TrainingPlanDto> CreateAsync(CreateTrainingPlanDto dto, string userId);
     Task<TrainingPlanDto?> UpdateAsync(int id, CreateTrainingPlanDto dto, string userId);
     Task<bool> DeleteAsync(int id, string userId);
-    Task<bool> AddExerciseAsync(int planId, int exerciseId, int dayOfWeek, int orderInDay, string userId);
+    Task<bool> AddExerciseAsync(int planId, AddPlanExerciseDto dto, string userId);
     Task<bool> RemoveExerciseAsync(int planExerciseId, string userId);
 }

@@ -1,6 +1,6 @@
 @NeuroPath.API_HostAddress = http://localhost:5026
 
-GET {{NeuroPath.API_HostAddress}}/weatherforecast/
-Accept: application/json
+GET {{NeuroPath.API_HostAddress}}/health
+Accept: text/plain
 
 ###

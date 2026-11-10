@@ -1,5 +1,8 @@
-using System.Net;
-using System.Text.Json;
+using System.Diagnostics;
+using FluentValidation;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using NeuroPath.Core.Exceptions;
 
 namespace NeuroPath.API.Middlewares;
 
@@ -14,19 +17,56 @@ public class ExceptionHandlingMiddleware
         _logger = logger;
     }
 
-    public async Task InvokeAsync(HttpContext ctx)
+    public async Task InvokeAsync(HttpContext context)
     {
-        try { await _next(ctx); }
-        catch (UnauthorizedAccessException ex) { await Write(ctx, HttpStatusCode.Unauthorized, ex.Message); }
-        catch (InvalidOperationException ex) { await Write(ctx, HttpStatusCode.BadRequest, ex.Message); }
-        catch (KeyNotFoundException ex) { await Write(ctx, HttpStatusCode.NotFound, ex.Message); }
-        catch (Exception ex) { _logger.LogError(ex, "Unhandled exception"); await Write(ctx, HttpStatusCode.InternalServerError, "An unexpected error occurred."); }
+        try
+        {
+            await _next(context);
+        }
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+        {
+            if (!context.Response.HasStarted)
+                context.Response.StatusCode = 499;
+        }
+        catch (Exception ex)
+        {
+            if (context.Response.HasStarted) throw;
+            await HandleAsync(context, ex);
+        }
     }
 
-    private static async Task Write(HttpContext ctx, HttpStatusCode code, string msg)
+    private async Task HandleAsync(HttpContext context, Exception exception)
     {
-        ctx.Response.StatusCode = (int)code;
-        ctx.Response.ContentType = "application/json";
-        await ctx.Response.WriteAsync(JsonSerializer.Serialize(new { error = msg }));
+        ProblemDetails problem = exception switch
+        {
+            ValidationException validation => new ValidationProblemDetails(
+                validation.Errors.GroupBy(e => e.PropertyName).ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage).ToArray()))
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "One or more validation errors occurred."
+            },
+            NotFoundException => Problem(StatusCodes.Status404NotFound, "Not found", exception.Message),
+            BusinessRuleException => Problem(StatusCodes.Status400BadRequest, "Request could not be processed", exception.Message),
+            ForbiddenException => Problem(StatusCodes.Status403Forbidden, "Forbidden", exception.Message),
+            ConflictException => Problem(StatusCodes.Status409Conflict, "Conflict", exception.Message),
+            UnauthorizedAccessException => Problem(StatusCodes.Status401Unauthorized, "Unauthorized", exception.Message),
+            DbUpdateConcurrencyException => Problem(StatusCodes.Status409Conflict, "Conflict", "The data was changed by another request. Please retry."),
+            DbUpdateException => Problem(StatusCodes.Status409Conflict, "Conflict", "The request conflicts with existing data."),
+            _ => Problem(StatusCodes.Status500InternalServerError, "Server error", "An unexpected error occurred.")
+        };
+
+        var traceId = Activity.Current?.Id ?? context.TraceIdentifier;
+        problem.Extensions["traceId"] = traceId;
+
+        if (problem.Status >= StatusCodes.Status500InternalServerError || exception is DbUpdateException)
+            _logger.LogError(exception, "Request {Method} {Path} failed. TraceId: {TraceId}", context.Request.Method, context.Request.Path, traceId);
+        else
+            _logger.LogInformation("Request {Method} {Path} rejected with {Status}: {Message}", context.Request.Method, context.Request.Path, problem.Status, exception.Message);
+
+        context.Response.StatusCode = problem.Status ?? StatusCodes.Status500InternalServerError;
+        await context.Response.WriteAsJsonAsync(problem, problem.GetType(), options: null, contentType: "application/problem+json");
     }
+
+    private static ProblemDetails Problem(int status, string title, string detail)
+        => new() { Status = status, Title = title, Detail = detail };
 }

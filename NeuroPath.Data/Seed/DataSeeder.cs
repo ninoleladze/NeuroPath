@@ -1,7 +1,7 @@
-using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using NeuroPath.Core.Common;
 using NeuroPath.Core.Models.Domain.Admin;
 using NeuroPath.Core.Models.Domain.BrainScience;
 using NeuroPath.Core.Models.Domain.Content;
@@ -12,35 +12,30 @@ using NeuroPath.Data.Context;
 
 namespace NeuroPath.Data.Seed;
 
+public sealed record SeedOptions(bool ApplyMigrations, string? AdminEmail, string? AdminPassword);
+
 public static class DataSeeder
 {
-    public static async Task SeedAsync(this WebApplication app)
+    public static async Task SeedAsync(this IServiceProvider services, SeedOptions options)
     {
-        using var scope = app.Services.CreateScope();
+        using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<NeuroPathDbContext>();
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
         var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<Role>>();
 
-        await db.Database.MigrateAsync();
+        if (options.ApplyMigrations)
+            await db.Database.MigrateAsync();
 
-        // Roles
-        foreach (var role in new[] { "Admin", "Trainer", "User" })
-            if (!await roleManager.RoleExistsAsync(role))
-                await roleManager.CreateAsync(new Role { Name = role, Description = $"{role} role" });
-
-        // Admin user
-        if (!await db.Users.AnyAsync())
+        foreach (var role in AppRoles.All)
         {
-            var admin = new User { UserName = "admin", Email = "admin@neuropath.com", IsActive = true, IsEmailVerified = true, EmailVerifiedAt = DateTime.UtcNow, CreatedAt = DateTime.UtcNow };
-            await userManager.CreateAsync(admin, "Admin@12345");
-            await userManager.AddToRoleAsync(admin, "Admin");
-            db.UserProfiles.Add(new UserProfile { UserId = admin.Id, FirstName = "Admin", LastName = "User" });
-            db.UserSettings.Add(new UserSettings { UserId = admin.Id });
-            db.Streaks.Add(new Streak { UserId = admin.Id, LastActivityDate = DateTime.UtcNow });
-            await db.SaveChangesAsync();
+            if (await roleManager.RoleExistsAsync(role)) continue;
+            var roleResult = await roleManager.CreateAsync(new Role { Name = role, Description = $"{role} role" });
+            EnsureSucceeded(roleResult, $"create role '{role}'");
         }
 
-        // Brain Areas
+        if (!await db.Users.AnyAsync())
+            await SeedAdminAsync(db, userManager, options);
+
         if (!await db.BrainAreas.AnyAsync())
         {
             db.BrainAreas.AddRange(
@@ -56,7 +51,6 @@ public static class DataSeeder
             await db.SaveChangesAsync();
         }
 
-        // Difficulty Levels
         if (!await db.DifficultyLevels.AnyAsync())
         {
             db.DifficultyLevels.AddRange(
@@ -69,7 +63,6 @@ public static class DataSeeder
             await db.SaveChangesAsync();
         }
 
-        // Exercise Categories
         if (!await db.ExerciseCategories.AnyAsync())
         {
             db.ExerciseCategories.AddRange(
@@ -89,7 +82,6 @@ public static class DataSeeder
             await db.SaveChangesAsync();
         }
 
-        // Article Categories
         if (!await db.ArticleCategories.AnyAsync())
         {
             db.ArticleCategories.AddRange(
@@ -107,7 +99,6 @@ public static class DataSeeder
             await db.SaveChangesAsync();
         }
 
-        // Tags
         if (!await db.Tags.AnyAsync())
         {
             var tags = new[] { "#focus", "#memory-boost", "#beginner-friendly", "#quick-5min", "#neuroplasticity", "#meditation", "#math", "#language", "#creativity", "#daily", "#challenge", "#advanced", "#science", "#sleep", "#nutrition", "#exercise", "#mindfulness", "#speed", "#logic", "#emotional-iq" };
@@ -115,7 +106,6 @@ public static class DataSeeder
             await db.SaveChangesAsync();
         }
 
-        // FAQ Categories
         if (!await db.FaqCategories.AnyAsync())
         {
             db.FaqCategories.AddRange(
@@ -128,7 +118,6 @@ public static class DataSeeder
             await db.SaveChangesAsync();
         }
 
-        // Achievements
         if (!await db.Achievements.AnyAsync())
         {
             db.Achievements.AddRange(
@@ -143,7 +132,6 @@ public static class DataSeeder
             await db.SaveChangesAsync();
         }
 
-        // Neurotransmitters
         if (!await db.Neurotransmitters.AnyAsync())
         {
             db.Neurotransmitters.AddRange(
@@ -158,7 +146,6 @@ public static class DataSeeder
             await db.SaveChangesAsync();
         }
 
-        // Cognitive Skills
         if (!await db.CognitiveSkills.AnyAsync())
         {
             db.CognitiveSkills.AddRange(
@@ -178,7 +165,6 @@ public static class DataSeeder
             await db.SaveChangesAsync();
         }
 
-        // Daily Tips
         if (!await db.DailyTips.AnyAsync())
         {
             db.DailyTips.AddRange(
@@ -191,7 +177,6 @@ public static class DataSeeder
             await db.SaveChangesAsync();
         }
 
-        // Sample exercises (only if we have categories and difficulty levels)
         if (!await db.Exercises.AnyAsync() && await db.ExerciseCategories.AnyAsync() && await db.DifficultyLevels.AnyAsync())
         {
             var memCat = await db.ExerciseCategories.FirstAsync(c => c.Name == "Memory Card");
@@ -206,5 +191,57 @@ public static class DataSeeder
             );
             await db.SaveChangesAsync();
         }
+
+        if (!await db.ExerciseBrainAreas.AnyAsync())
+            await SeedExerciseBrainAreasAsync(db);
+    }
+
+    private static async Task SeedExerciseBrainAreasAsync(NeuroPathDbContext db)
+    {
+        var links = new (string Exercise, string BrainArea, int Impact, bool Primary)[]
+        {
+            ("Number Sequence Memory", "Memory", 5, true),
+            ("Number Sequence Memory", "Attention", 3, false),
+            ("Logic Puzzle Grid", "Logic", 5, true),
+            ("Logic Puzzle Grid", "Problem Solving", 4, false),
+            ("Mental Arithmetic Sprint", "Processing Speed", 5, true),
+            ("Mental Arithmetic Sprint", "Logic", 3, false)
+        };
+
+        var exercises = (await db.Exercises.Select(e => new { e.Title, e.Id }).ToListAsync())
+            .GroupBy(e => e.Title).ToDictionary(g => g.Key, g => g.First().Id);
+        var areas = await db.BrainAreas.ToDictionaryAsync(b => b.Name, b => b.Id);
+
+        foreach (var link in links)
+        {
+            if (!exercises.TryGetValue(link.Exercise, out var exerciseId) || !areas.TryGetValue(link.BrainArea, out var areaId)) continue;
+            db.ExerciseBrainAreas.Add(new ExerciseBrainArea { ExerciseId = exerciseId, BrainAreaId = areaId, ImpactLevel = link.Impact, IsPrimary = link.Primary });
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task SeedAdminAsync(NeuroPathDbContext db, UserManager<User> userManager, SeedOptions options)
+    {
+        if (string.IsNullOrWhiteSpace(options.AdminPassword))
+            throw new InvalidOperationException("Seed:AdminPassword is not configured. Set it with: dotnet user-secrets set \"Seed:AdminPassword\" \"<strong password>\" --project NeuroPath.API");
+
+        var email = string.IsNullOrWhiteSpace(options.AdminEmail) ? "admin@neuropath.com" : options.AdminEmail;
+        var admin = new User { UserName = "admin", Email = email, IsActive = true, IsEmailVerified = true, EmailVerifiedAt = DateTime.UtcNow, CreatedAt = DateTime.UtcNow };
+
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        EnsureSucceeded(await userManager.CreateAsync(admin, options.AdminPassword), "create the admin user");
+        EnsureSucceeded(await userManager.AddToRoleAsync(admin, AppRoles.Admin), "assign the Admin role");
+        db.UserProfiles.Add(new UserProfile { UserId = admin.Id, FirstName = "Admin", LastName = "User" });
+        db.UserSettings.Add(new UserSettings { UserId = admin.Id });
+        db.Streaks.Add(new Streak { UserId = admin.Id, LastActivityDate = DateTime.UtcNow });
+        await db.SaveChangesAsync();
+        await transaction.CommitAsync();
+    }
+
+    private static void EnsureSucceeded(IdentityResult result, string action)
+    {
+        if (!result.Succeeded)
+            throw new InvalidOperationException($"Seeding failed to {action}: {string.Join(", ", result.Errors.Select(e => e.Description))}");
     }
 }

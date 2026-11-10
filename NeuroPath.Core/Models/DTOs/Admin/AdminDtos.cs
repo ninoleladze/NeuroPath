@@ -183,4 +183,43 @@ public class CreateMoodLogDto
     public string? Notes { get; set; }
 }
 
-public enum MoodType { VeryLow = 1, Low = 2, Neutral = 3, Good = 4, Excellent = 5 }
+public class MoodStatsDto
+{
+    public int TotalLogs { get; set; }
+    public double AverageEnergy { get; set; }
+    public double AverageFocus { get; set; }
+    public double AverageStress { get; set; }
+    public decimal AverageSleep { get; set; }
+    public string? MostCommonMood { get; set; }
+    public int PhysicalActivityDays { get; set; }
+}
+
+public class ChallengeLeaderboardEntryDto
+{
+    public int Rank { get; set; }
+    public string UserId { get; set; } = string.Empty;
+    public string UserName { get; set; } = string.Empty;
+    public int EarnedPoints { get; set; }
+    public int CompletedExercises { get; set; }
+    public string Status { get; set; } = string.Empty;
+}
+
+public class FeedbackResponseDto
+{
+    public string Response { get; set; } = string.Empty;
+}
+
+public class ResolveTicketDto
+{
+    public string Resolution { get; set; } = string.Empty;
+}
+
+public class AssignTicketDto
+{
+    public string AssigneeUserId { get; set; } = string.Empty;
+}
+
+public class SetActiveDto
+{
+    public bool IsActive { get; set; }
+}

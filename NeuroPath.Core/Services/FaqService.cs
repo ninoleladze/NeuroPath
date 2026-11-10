@@ -1,17 +1,17 @@
 using Microsoft.EntityFrameworkCore;
+using NeuroPath.Core.Exceptions;
 using NeuroPath.Core.Interfaces;
 using NeuroPath.Core.Models.Domain.Admin;
 using NeuroPath.Core.Models.DTOs.Admin;
-using NeuroPath.Data.Context;
 
 namespace NeuroPath.Core.Services;
 
 public class FaqService : IFaqService
 {
-    private readonly NeuroPathDbContext _db;
+    private readonly INeuroPathDbContext _db;
     private readonly ICacheService _cache;
 
-    public FaqService(NeuroPathDbContext db, ICacheService cache)
+    public FaqService(INeuroPathDbContext db, ICacheService cache)
     {
         _db = db;
         _cache = cache;
@@ -26,7 +26,7 @@ public class FaqService : IFaqService
             .Select(c => new FaqCategoryDto
             {
                 Id = c.Id, Name = c.Name, DisplayOrder = c.DisplayOrder,
-                Faqs = c.Faqs.OrderBy(f => f.DisplayOrder).Select(f => new FaqDto { Id = f.Id, Question = f.Question, Answer = f.Answer, DisplayOrder = f.DisplayOrder, ViewCount = f.ViewCount }).ToList()
+                Faqs = c.Faqs.Where(f => f.IsPublished).OrderBy(f => f.DisplayOrder).Select(f => new FaqDto { Id = f.Id, Question = f.Question, Answer = f.Answer, DisplayOrder = f.DisplayOrder, ViewCount = f.ViewCount }).ToList()
             }).ToListAsync();
         _cache.Set(key, list, TimeSpan.FromMinutes(30));
         return list;
@@ -39,6 +39,8 @@ public class FaqService : IFaqService
 
     public async Task<FaqDto> CreateFaqAsync(CreateFaqDto dto)
     {
+        if (!await _db.FaqCategories.AnyAsync(c => c.Id == dto.FaqCategoryId))
+            throw new BusinessRuleException($"FAQ category {dto.FaqCategoryId} does not exist.");
         var f = new Faq { FaqCategoryId = dto.FaqCategoryId, Question = dto.Question, Answer = dto.Answer, DisplayOrder = dto.DisplayOrder };
         _db.Faqs.Add(f);
         await _db.SaveChangesAsync();

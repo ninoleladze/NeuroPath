@@ -14,6 +14,7 @@ public class UserQuizAttempt
     public decimal ScorePercent { get; set; }
     public bool IsPassed { get; set; }
     public int AttemptNumber { get; set; } = 1;
+    public int PointsAwarded { get; set; }
 
     public User User { get; set; } = null!;
     public Quiz Quiz { get; set; } = null!;

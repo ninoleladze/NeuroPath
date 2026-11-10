@@ -1,61 +1,109 @@
 using Microsoft.EntityFrameworkCore;
+using NeuroPath.Core.Common;
+using NeuroPath.Core.Enums;
+using NeuroPath.Core.Exceptions;
 using NeuroPath.Core.Interfaces;
+using NeuroPath.Core.Models.Domain.Communication;
 using NeuroPath.Core.Models.Domain.Social;
 using NeuroPath.Core.Models.DTOs.Social;
-using NeuroPath.Data.Context;
 
 namespace NeuroPath.Core.Services;
 
 public class DirectMessageService : IDirectMessageService
 {
-    private readonly NeuroPathDbContext _db;
+    private readonly INeuroPathDbContext _db;
+    private readonly IFriendshipService _friendships;
 
-    public DirectMessageService(NeuroPathDbContext db) => _db = db;
+    public DirectMessageService(INeuroPathDbContext db, IFriendshipService friendships)
+    {
+        _db = db;
+        _friendships = friendships;
+    }
 
-    public async Task<List<DirectMessageDto>> GetConversationAsync(string userId, string otherUserId)
-        => await _db.DirectMessages
+    public async Task<List<DirectMessageDto>> GetConversationAsync(string userId, string otherUserId, int page = 1, int pageSize = 50)
+    {
+        var (skip, take) = Paging.Normalize(page, pageSize);
+        var messages = await _db.DirectMessages.AsNoTracking()
             .Where(m => (m.SenderId == userId && m.ReceiverId == otherUserId) || (m.SenderId == otherUserId && m.ReceiverId == userId))
-            .Include(m => m.Sender)
-            .OrderBy(m => m.SentAt)
+            .OrderByDescending(m => m.SentAt).ThenByDescending(m => m.Id)
+            .Skip(skip).Take(take)
             .Select(m => new DirectMessageDto
             {
-                Id = m.Id, SenderId = m.SenderId, SenderUserName = m.Sender.UserName!,
-                ReceiverId = m.ReceiverId, Content = m.Content, SentAt = m.SentAt, IsRead = m.IsRead
-            }).ToListAsync();
+                Id = m.Id,
+                SenderId = m.SenderId,
+                SenderUserName = m.Sender.UserName!,
+                ReceiverId = m.ReceiverId,
+                Content = m.Content,
+                SentAt = m.SentAt,
+                IsRead = m.IsRead
+            })
+            .ToListAsync();
+        messages.Reverse();
+        return messages;
+    }
 
-    public async Task<List<DirectMessageDto>> GetRecentConversationsAsync(string userId)
+    public async Task<List<DirectMessageDto>> GetRecentConversationsAsync(string userId, int limit = 20)
     {
-        var recentMessages = await _db.DirectMessages
+        var latestIds = await _db.DirectMessages
             .Where(m => m.SenderId == userId || m.ReceiverId == userId)
-            .Include(m => m.Sender).Include(m => m.Receiver)
-            .OrderByDescending(m => m.SentAt)
+            .GroupBy(m => m.SenderId == userId ? m.ReceiverId : m.SenderId)
+            .Select(g => g.Max(m => m.Id))
             .ToListAsync();
 
-        return recentMessages
-            .GroupBy(m => m.SenderId == userId ? m.ReceiverId : m.SenderId)
-            .Select(g => g.First())
+        return await _db.DirectMessages.AsNoTracking()
+            .Where(m => latestIds.Contains(m.Id))
+            .OrderByDescending(m => m.SentAt)
+            .Take(Math.Clamp(limit, 1, Paging.MaxPageSize))
             .Select(m => new DirectMessageDto
             {
-                Id = m.Id, SenderId = m.SenderId, SenderUserName = m.Sender.UserName!,
-                ReceiverId = m.ReceiverId, Content = m.Content, SentAt = m.SentAt, IsRead = m.IsRead
-            }).ToList();
+                Id = m.Id,
+                SenderId = m.SenderId,
+                SenderUserName = m.Sender.UserName!,
+                ReceiverId = m.ReceiverId,
+                Content = m.Content,
+                SentAt = m.SentAt,
+                IsRead = m.IsRead
+            })
+            .ToListAsync();
     }
 
     public async Task<DirectMessageDto> SendAsync(SendMessageDto dto, string senderId)
     {
-        var m = new DirectMessage { SenderId = senderId, ReceiverId = dto.ReceiverId, Content = dto.Content };
-        _db.DirectMessages.Add(m);
+        if (dto.ReceiverId == senderId)
+            throw new BusinessRuleException("You cannot send a message to yourself.");
+        if (!await _db.Users.AnyAsync(u => u.Id == dto.ReceiverId && u.IsActive && !u.IsBlocked))
+            throw new NotFoundException("Recipient not found.");
+        if (!await _friendships.AreFriendsAsync(senderId, dto.ReceiverId))
+            throw new ForbiddenException("You can only message your friends.");
+
+        var message = new DirectMessage { SenderId = senderId, ReceiverId = dto.ReceiverId, Content = dto.Content.Trim() };
+        var senderName = await _db.Users.Where(u => u.Id == senderId).Select(u => u.UserName).FirstOrDefaultAsync() ?? string.Empty;
+
+        _db.DirectMessages.Add(message);
+        _db.Notifications.Add(new Notification
+        {
+            UserId = dto.ReceiverId,
+            Title = "New message",
+            Message = $"{senderName} sent you a message.",
+            Type = NotificationType.MessageReceived,
+            ReferenceType = nameof(DirectMessage)
+        });
         await _db.SaveChangesAsync();
-        var sender = await _db.Users.FindAsync(senderId);
-        return new DirectMessageDto { Id = m.Id, SenderId = m.SenderId, SenderUserName = sender?.UserName ?? senderId, ReceiverId = m.ReceiverId, Content = m.Content, SentAt = m.SentAt, IsRead = m.IsRead };
+
+        return new DirectMessageDto
+        {
+            Id = message.Id,
+            SenderId = senderId,
+            SenderUserName = senderName,
+            ReceiverId = message.ReceiverId,
+            Content = message.Content,
+            SentAt = message.SentAt,
+            IsRead = false
+        };
     }
 
     public async Task<bool> MarkReadAsync(int messageId, string userId)
-    {
-        var m = await _db.DirectMessages.FirstOrDefaultAsync(x => x.Id == messageId && x.ReceiverId == userId);
-        if (m == null) return false;
-        m.IsRead = true; m.ReadAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync();
-        return true;
-    }
+        => await _db.DirectMessages
+            .Where(m => m.Id == messageId && m.ReceiverId == userId && !m.IsRead)
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.IsRead, true).SetProperty(m => m.ReadAt, DateTime.UtcNow)) > 0;
 }

@@ -118,3 +118,29 @@ public class TagDto
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
 }
+
+public class DailyTipAdminDto : DailyTipDto
+{
+    public bool IsActive { get; set; }
+    public DateTime? DisplayDate { get; set; }
+}
+
+public class UpdateCommentDto
+{
+    public string Content { get; set; } = string.Empty;
+}
+
+public class CreateTagDto
+{
+    public string Name { get; set; } = string.Empty;
+}
+
+public class SaveDailyTipDto
+{
+    public string Title { get; set; } = string.Empty;
+    public string Content { get; set; } = string.Empty;
+    public string Category { get; set; } = string.Empty;
+    public string? IconUrl { get; set; }
+    public bool IsActive { get; set; } = true;
+    public DateTime? DisplayDate { get; set; }
+}

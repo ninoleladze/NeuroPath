@@ -1,60 +1,65 @@
 using Microsoft.EntityFrameworkCore;
+using NeuroPath.Core.Common;
 using NeuroPath.Core.Enums;
 using NeuroPath.Core.Interfaces;
 using NeuroPath.Core.Models.Domain.Communication;
 using NeuroPath.Core.Models.DTOs.Admin;
-using NeuroPath.Data.Context;
 
 namespace NeuroPath.Core.Services;
 
 public class NotificationService : INotificationService
 {
-    private readonly NeuroPathDbContext _db;
+    private readonly INeuroPathDbContext _db;
 
-    public NotificationService(NeuroPathDbContext db) => _db = db;
+    public NotificationService(INeuroPathDbContext db) => _db = db;
 
-    public async Task<List<NotificationDto>> GetUserNotificationsAsync(string userId)
-        => await _db.Notifications.Where(n => n.UserId == userId)
+    public async Task<List<NotificationDto>> GetUserNotificationsAsync(string userId, int page = 1, int pageSize = 20)
+    {
+        var (skip, take) = Paging.Normalize(page, pageSize);
+        var rows = await _db.Notifications.AsNoTracking()
+            .Where(n => n.UserId == userId)
             .OrderByDescending(n => n.CreatedAt)
-            .Select(n => new NotificationDto
-            {
-                Id = n.Id, Title = n.Title, Message = n.Message, Type = n.Type.ToString(),
-                IsRead = n.IsRead, CreatedAt = n.CreatedAt, ReferenceId = n.ReferenceId, ReferenceType = n.ReferenceType
-            }).ToListAsync();
+            .Skip(skip).Take(take)
+            .ToListAsync();
+        return rows.Select(n => new NotificationDto
+        {
+            Id = n.Id,
+            Title = n.Title,
+            Message = n.Message,
+            Type = n.Type.ToString(),
+            IsRead = n.IsRead,
+            CreatedAt = n.CreatedAt,
+            ReferenceId = n.ReferenceId,
+            ReferenceType = n.ReferenceType
+        }).ToList();
+    }
+
+    public Task<int> GetUnreadCountAsync(string userId)
+        => _db.Notifications.CountAsync(n => n.UserId == userId && !n.IsRead);
 
     public async Task<bool> MarkReadAsync(int id, string userId)
-    {
-        var n = await _db.Notifications.FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId);
-        if (n == null) return false;
-        n.IsRead = true; n.ReadAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync();
-        return true;
-    }
+        => await _db.Notifications
+            .Where(n => n.Id == id && n.UserId == userId && !n.IsRead)
+            .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true).SetProperty(n => n.ReadAt, DateTime.UtcNow)) > 0;
 
-    public async Task<bool> MarkAllReadAsync(string userId)
-    {
-        var notifications = await _db.Notifications.Where(x => x.UserId == userId && !x.IsRead).ToListAsync();
-        foreach (var n in notifications) { n.IsRead = true; n.ReadAt = DateTime.UtcNow; }
-        await _db.SaveChangesAsync();
-        return true;
-    }
+    public Task<int> MarkAllReadAsync(string userId)
+        => _db.Notifications
+            .Where(n => n.UserId == userId && !n.IsRead)
+            .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true).SetProperty(n => n.ReadAt, DateTime.UtcNow));
 
     public async Task<bool> DeleteAsync(int id, string userId)
-    {
-        var n = await _db.Notifications.FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId);
-        if (n == null) return false;
-        _db.Notifications.Remove(n);
-        await _db.SaveChangesAsync();
-        return true;
-    }
+        => await _db.Notifications.Where(n => n.Id == id && n.UserId == userId).ExecuteDeleteAsync() > 0;
 
-    public async Task CreateAsync(string userId, string title, string message, string type, int? referenceId = null, string? referenceType = null)
+    public async Task CreateAsync(string userId, string title, string message, NotificationType type, int? referenceId = null, string? referenceType = null)
     {
-        if (!Enum.TryParse<NotificationType>(type, out var notifType)) notifType = NotificationType.AchievementUnlocked;
         _db.Notifications.Add(new Notification
         {
-            UserId = userId, Title = title, Message = message, Type = notifType,
-            ReferenceId = referenceId, ReferenceType = referenceType
+            UserId = userId,
+            Title = title,
+            Message = message,
+            Type = type,
+            ReferenceId = referenceId,
+            ReferenceType = referenceType
         });
         await _db.SaveChangesAsync();
     }

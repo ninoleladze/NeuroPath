@@ -1,71 +1,106 @@
 using Microsoft.EntityFrameworkCore;
+using NeuroPath.Core.Exceptions;
 using NeuroPath.Core.Interfaces;
 using NeuroPath.Core.Models.Domain.Training;
 using NeuroPath.Core.Models.DTOs.Training;
-using NeuroPath.Data.Context;
 
 namespace NeuroPath.Core.Services;
 
 public class TrainingPlanService : ITrainingPlanService
 {
-    private readonly NeuroPathDbContext _db;
+    private readonly INeuroPathDbContext _db;
 
-    public TrainingPlanService(NeuroPathDbContext db) => _db = db;
+    public TrainingPlanService(INeuroPathDbContext db) => _db = db;
 
     public async Task<List<TrainingPlanDto>> GetUserPlansAsync(string userId)
-        => await _db.TrainingPlans.Where(p => p.UserId == userId)
-            .Include(p => p.Exercises)
-            .Select(p => new TrainingPlanDto { Id = p.Id, Title = p.Title, Description = p.Description, StartDate = p.StartDate, EndDate = p.EndDate, IsActive = p.IsActive, CreatedAt = p.CreatedAt, ExerciseCount = p.Exercises.Count })
+        => await _db.TrainingPlans.AsNoTracking()
+            .Where(p => p.UserId == userId)
+            .OrderByDescending(p => p.IsActive).ThenByDescending(p => p.StartDate)
+            .Select(p => new TrainingPlanDto
+            {
+                Id = p.Id,
+                Title = p.Title,
+                Description = p.Description,
+                StartDate = p.StartDate,
+                EndDate = p.EndDate,
+                IsActive = p.IsActive,
+                CreatedAt = p.CreatedAt,
+                ExerciseCount = p.Exercises.Count
+            })
             .ToListAsync();
 
     public async Task<TrainingPlanDto?> GetByIdAsync(int id, string userId)
-    {
-        var p = await _db.TrainingPlans.Include(x => x.Exercises).FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId);
-        if (p == null) return null;
-        return new TrainingPlanDto { Id = p.Id, Title = p.Title, Description = p.Description, StartDate = p.StartDate, EndDate = p.EndDate, IsActive = p.IsActive, CreatedAt = p.CreatedAt, ExerciseCount = p.Exercises.Count };
-    }
+        => await _db.TrainingPlans.AsNoTracking()
+            .Where(p => p.Id == id && p.UserId == userId)
+            .Select(p => new TrainingPlanDto
+            {
+                Id = p.Id,
+                Title = p.Title,
+                Description = p.Description,
+                StartDate = p.StartDate,
+                EndDate = p.EndDate,
+                IsActive = p.IsActive,
+                CreatedAt = p.CreatedAt,
+                ExerciseCount = p.Exercises.Count
+            })
+            .FirstOrDefaultAsync();
 
     public async Task<TrainingPlanDto> CreateAsync(CreateTrainingPlanDto dto, string userId)
     {
-        var p = new TrainingPlan { UserId = userId, Title = dto.Title, Description = dto.Description, StartDate = dto.StartDate, EndDate = dto.EndDate };
-        _db.TrainingPlans.Add(p);
+        var plan = new TrainingPlan
+        {
+            UserId = userId,
+            Title = dto.Title,
+            Description = dto.Description,
+            StartDate = dto.StartDate.Date,
+            EndDate = dto.EndDate.Date
+        };
+        _db.TrainingPlans.Add(plan);
         await _db.SaveChangesAsync();
-        return new TrainingPlanDto { Id = p.Id, Title = p.Title, Description = p.Description, StartDate = p.StartDate, EndDate = p.EndDate, IsActive = p.IsActive, CreatedAt = p.CreatedAt };
+        return (await GetByIdAsync(plan.Id, userId))!;
     }
 
     public async Task<TrainingPlanDto?> UpdateAsync(int id, CreateTrainingPlanDto dto, string userId)
     {
-        var p = await _db.TrainingPlans.FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId);
-        if (p == null) return null;
-        p.Title = dto.Title; p.Description = dto.Description; p.StartDate = dto.StartDate; p.EndDate = dto.EndDate;
+        var plan = await _db.TrainingPlans.FirstOrDefaultAsync(p => p.Id == id && p.UserId == userId);
+        if (plan == null) return null;
+        plan.Title = dto.Title;
+        plan.Description = dto.Description;
+        plan.StartDate = dto.StartDate.Date;
+        plan.EndDate = dto.EndDate.Date;
         await _db.SaveChangesAsync();
-        return new TrainingPlanDto { Id = p.Id, Title = p.Title, Description = p.Description, StartDate = p.StartDate, EndDate = p.EndDate, IsActive = p.IsActive };
+        return await GetByIdAsync(id, userId);
     }
 
     public async Task<bool> DeleteAsync(int id, string userId)
     {
-        var p = await _db.TrainingPlans.FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId);
-        if (p == null) return false;
-        _db.TrainingPlans.Remove(p);
+        var plan = await _db.TrainingPlans.FirstOrDefaultAsync(p => p.Id == id && p.UserId == userId);
+        if (plan == null) return false;
+        _db.TrainingPlans.Remove(plan);
         await _db.SaveChangesAsync();
         return true;
     }
 
-    public async Task<bool> AddExerciseAsync(int planId, int exerciseId, int dayOfWeek, int orderInDay, string userId)
+    public async Task<bool> AddExerciseAsync(int planId, AddPlanExerciseDto dto, string userId)
     {
-        var plan = await _db.TrainingPlans.FirstOrDefaultAsync(p => p.Id == planId && p.UserId == userId);
-        if (plan == null) return false;
-        _db.TrainingPlanExercises.Add(new TrainingPlanExercise { TrainingPlanId = planId, ExerciseId = exerciseId, DayOfWeek = dayOfWeek, OrderInDay = orderInDay });
+        if (!await _db.TrainingPlans.AnyAsync(p => p.Id == planId && p.UserId == userId))
+            return false;
+        if (!await _db.Exercises.AnyAsync(e => e.Id == dto.ExerciseId && e.IsActive))
+            throw new NotFoundException("Exercise not found.");
+
+        _db.TrainingPlanExercises.Add(new TrainingPlanExercise
+        {
+            TrainingPlanId = planId,
+            ExerciseId = dto.ExerciseId,
+            DayOfWeek = dto.DayOfWeek,
+            OrderInDay = dto.OrderInDay
+        });
         await _db.SaveChangesAsync();
         return true;
     }
 
     public async Task<bool> RemoveExerciseAsync(int planExerciseId, string userId)
-    {
-        var pe = await _db.TrainingPlanExercises.Include(x => x.TrainingPlan).FirstOrDefaultAsync(x => x.Id == planExerciseId && x.TrainingPlan.UserId == userId);
-        if (pe == null) return false;
-        _db.TrainingPlanExercises.Remove(pe);
-        await _db.SaveChangesAsync();
-        return true;
-    }
+        => await _db.TrainingPlanExercises
+            .Where(x => x.Id == planExerciseId && x.TrainingPlan.UserId == userId)
+            .ExecuteDeleteAsync() > 0;
 }

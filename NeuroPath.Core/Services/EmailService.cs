@@ -1,5 +1,7 @@
+using System.Net;
 using MailKit.Net.Smtp;
 using MailKit.Security;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MimeKit;
 using NeuroPath.Core.Interfaces;
@@ -10,41 +12,69 @@ namespace NeuroPath.Core.Services;
 public class EmailService : IEmailService
 {
     private readonly SmtpSettings _smtp;
-    public EmailService(IOptions<SmtpSettings> smtp) => _smtp = smtp.Value;
+    private readonly ClientAppSettings _client;
+    private readonly ILogger<EmailService> _logger;
 
-    public async Task SendVerificationEmailAsync(string email, string firstName, string token)
+    public EmailService(IOptions<SmtpSettings> smtp, IOptions<ClientAppSettings> client, ILogger<EmailService> logger)
     {
-        var url = $"http://localhost:4200/auth/verify-email?token={Uri.EscapeDataString(token)}";
-        await Send(email, "Verify Your NeuroPath Email",
-            $"<h2>Hello {firstName}!</h2><p>Click to verify your email:</p><a href='{url}' style='background:#667eea;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;'>Verify Email</a><p>Link valid for 24 hours.</p>");
+        _smtp = smtp.Value;
+        _client = client.Value;
+        _logger = logger;
     }
 
-    public async Task SendPasswordResetEmailAsync(string email, string firstName, string token)
+    public Task SendVerificationEmailAsync(string email, string firstName, string token)
     {
-        var url = $"http://localhost:4200/auth/reset-password?token={Uri.EscapeDataString(token)}";
-        await Send(email, "Reset Your NeuroPath Password",
-            $"<h2>Hello {firstName}!</h2><p>Click to reset your password:</p><a href='{url}' style='background:#e53e3e;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;'>Reset Password</a><p>Link valid for 1 hour.</p>");
+        var url = BuildClientUrl("auth/verify-email", token);
+        return SendAsync(email, "Verify your NeuroPath email",
+            $"<h2>Hello {Encode(firstName)}!</h2><p>Click the button below to verify your email address.</p>{Button(url, "Verify email", "#667eea")}<p>This link is valid for 24 hours.</p>");
     }
 
-    public async Task SendWelcomeEmailAsync(string email, string firstName)
-        => await Send(email, "Welcome to NeuroPath!",
-            $"<h2>Welcome, {firstName}!</h2><p>Your email is verified. Start your cognitive journey at NeuroPath!</p>");
-
-    private async Task Send(string to, string subject, string html)
+    public Task SendPasswordResetEmailAsync(string email, string firstName, string token)
     {
-        var msg = new MimeMessage();
-        msg.From.Add(new MailboxAddress(_smtp.FromName, _smtp.FromEmail));
-        msg.To.Add(MailboxAddress.Parse(to));
-        msg.Subject = subject;
-        msg.Body = new TextPart(MimeKit.Text.TextFormat.Html) { Text = html };
-        using var client = new SmtpClient();
+        var url = BuildClientUrl("auth/reset-password", token);
+        return SendAsync(email, "Reset your NeuroPath password",
+            $"<h2>Hello {Encode(firstName)}!</h2><p>Click the button below to choose a new password.</p>{Button(url, "Reset password", "#e53e3e")}<p>This link is valid for 1 hour. If you did not request it, you can ignore this email.</p>");
+    }
+
+    public Task SendWelcomeEmailAsync(string email, string firstName)
+        => SendAsync(email, "Welcome to NeuroPath!",
+            $"<h2>Welcome, {Encode(firstName)}!</h2><p>Your email is verified. Start your cognitive journey at NeuroPath!</p>");
+
+    private string BuildClientUrl(string path, string token)
+        => $"{_client.BaseUrl.TrimEnd('/')}/{path}?token={Uri.EscapeDataString(token)}";
+
+    private static string Encode(string value) => WebUtility.HtmlEncode(value);
+
+    private static string Button(string url, string text, string color)
+        => $"<a href=\"{WebUtility.HtmlEncode(url)}\" style=\"background:{color};color:white;padding:12px 24px;border-radius:8px;text-decoration:none;\">{text}</a>";
+
+    private async Task SendAsync(string to, string subject, string html)
+    {
+        if (_smtp.LogEmailsInsteadOfSending)
+        {
+            _logger.LogWarning("Email delivery is disabled. To: {To} | Subject: {Subject} | Body: {Body}", to, subject, html);
+            return;
+        }
+
+        var message = new MimeMessage();
+        message.From.Add(new MailboxAddress(_smtp.FromName, _smtp.FromEmail));
+        message.To.Add(MailboxAddress.Parse(to));
+        message.Subject = subject;
+        message.Body = new TextPart(MimeKit.Text.TextFormat.Html) { Text = html };
+
         try
         {
-            await client.ConnectAsync(_smtp.Host, _smtp.Port, SecureSocketOptions.StartTls);
-            await client.AuthenticateAsync(_smtp.Username, _smtp.Password);
-            await client.SendAsync(msg);
+            using var client = new SmtpClient();
+            var socketOptions = _smtp.EnableSsl ? SecureSocketOptions.StartTls : SecureSocketOptions.None;
+            await client.ConnectAsync(_smtp.Host, _smtp.Port, socketOptions);
+            if (!string.IsNullOrEmpty(_smtp.Username))
+                await client.AuthenticateAsync(_smtp.Username, _smtp.Password);
+            await client.SendAsync(message);
             await client.DisconnectAsync(true);
         }
-        catch { /* Log in production */ }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send email \"{Subject}\"", subject);
+        }
     }
 }

@@ -46,6 +46,8 @@ public class CertificateDto
     public string Description { get; set; } = string.Empty;
     public CertificateType CertificateType { get; set; }
     public string? ImageUrl { get; set; }
+    public int? RequiredCourseModuleId { get; set; }
+    public int? RequiredAssessmentId { get; set; }
     public int? RequiredScorePercent { get; set; }
 }
 
@@ -56,4 +58,65 @@ public class UserCertificateDto
     public DateTime EarnedAt { get; set; }
     public string CertificateNumber { get; set; } = string.Empty;
     public string? PdfUrl { get; set; }
+}
+
+public class SkillAssessmentDetailDto : SkillAssessmentDto
+{
+    public List<AssessmentQuestionDto> Questions { get; set; } = new();
+}
+
+public class AssessmentQuestionDto
+{
+    public int Id { get; set; }
+    public string QuestionText { get; set; } = string.Empty;
+    public string QuestionType { get; set; } = "SingleChoice";
+    public int Points { get; set; }
+    public int OrderIndex { get; set; }
+    public List<AssessmentAnswerDto> Answers { get; set; } = new();
+}
+
+public class AssessmentAnswerDto
+{
+    public int Id { get; set; }
+    public string AnswerText { get; set; } = string.Empty;
+    public int OrderIndex { get; set; }
+}
+
+public class CreateAssessmentQuestionDto
+{
+    public string QuestionText { get; set; } = string.Empty;
+    public string QuestionType { get; set; } = "SingleChoice";
+    public int Points { get; set; }
+    public int OrderIndex { get; set; }
+    public List<CreateAssessmentAnswerDto> Answers { get; set; } = new();
+}
+
+public class CreateAssessmentAnswerDto
+{
+    public string AnswerText { get; set; } = string.Empty;
+    public bool IsCorrect { get; set; }
+    public int OrderIndex { get; set; }
+}
+
+public class SubmitAssessmentDto
+{
+    public List<AssessmentAnswerSubmission> Answers { get; set; } = new();
+    public int TimeTakenSeconds { get; set; }
+}
+
+public class AssessmentAnswerSubmission
+{
+    public int QuestionId { get; set; }
+    public int? SelectedAnswerId { get; set; }
+}
+
+public class CreateCertificateDto
+{
+    public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public CertificateType CertificateType { get; set; }
+    public string? ImageUrl { get; set; }
+    public int? RequiredCourseModuleId { get; set; }
+    public int? RequiredAssessmentId { get; set; }
+    public int? RequiredScorePercent { get; set; }
 }

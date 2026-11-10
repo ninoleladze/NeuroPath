@@ -21,3 +21,8 @@ appsettings.*.local.json
 .DS_Store
 Thumbs.db
 .claude/
+
+# Runtime output
+logs/
+**/wwwroot/uploads/
+**/TestResults/

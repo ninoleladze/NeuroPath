@@ -2,18 +2,17 @@ using Microsoft.EntityFrameworkCore;
 using NeuroPath.Core.Interfaces;
 using NeuroPath.Core.Models.Domain.BrainScience;
 using NeuroPath.Core.Models.DTOs.BrainScience;
-using NeuroPath.Data.Context;
 
 namespace NeuroPath.Core.Services;
 
 public class BrainAreaService : IBrainAreaService
 {
-    private readonly NeuroPathDbContext _db;
+    private readonly INeuroPathDbContext _db;
     private readonly ICacheService _cache;
     private const string Key = "brain-areas";
     private static readonly TimeSpan Exp = TimeSpan.FromMinutes(60);
 
-    public BrainAreaService(NeuroPathDbContext db, ICacheService cache)
+    public BrainAreaService(INeuroPathDbContext db, ICacheService cache)
     {
         _db = db;
         _cache = cache;

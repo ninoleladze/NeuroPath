@@ -9,3 +9,5 @@ public class FileResponseDto
     public string ContentType { get; set; } = string.Empty;
     public DateTime UploadedAt { get; set; }
 }
+
+public sealed record FileUploadRequest(Stream Content, string FileName, string ContentType, long Length);

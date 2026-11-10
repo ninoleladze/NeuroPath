@@ -5,6 +5,7 @@ public class ProgressSummaryDto
     public int TotalPoints { get; set; }
     public int ExercisesCompleted { get; set; }
     public int QuizzesCompleted { get; set; }
+    public int CourseLessonsCompleted { get; set; }
     public int StreakDays { get; set; }
     public decimal AverageAccuracy { get; set; }
     public int TotalTrainingMinutes { get; set; }

@@ -26,17 +26,35 @@ Backend for **NeuroPath**, a brain-training and learning platform. Users work th
 ## Project Structure
 
 ```
-NeuroPath.API/    Program.cs (DI, auth, rate limiting, Swagger), exception-handling middleware
-NeuroPath.Core/   Domain models, DTOs, interfaces, 35 services, settings
-NeuroPath.Data/   DbContext and seed data
+NeuroPath.API/    Program.cs (DI, auth, rate limiting, Swagger), middleware, validation filter
+NeuroPath.Core/   Domain models, DTOs, interfaces, services, validators, settings
+NeuroPath.Data/   DbContext, entity configurations, seed data
 ```
 
+Dependency flow: `API → Core`, `API → Data`, `Data → Core`. Core depends only on the `INeuroPathDbContext` abstraction.
+
 ## Getting Started
+
+1. Set the required secrets (they are intentionally empty in `appsettings.json`):
+
+```bash
+dotnet user-secrets set "JwtSettings:SecretKey" "<random value, at least 32 characters>" --project NeuroPath.API
+dotnet user-secrets set "Seed:AdminPassword" "<strong password>" --project NeuroPath.API
+dotnet user-secrets set "SmtpSettings:Username" "<smtp user>" --project NeuroPath.API
+dotnet user-secrets set "SmtpSettings:Password" "<smtp password>" --project NeuroPath.API
+```
+
+2. Create the database:
 
 ```bash
 dotnet ef migrations add InitialCreate --project NeuroPath.Data --startup-project NeuroPath.API
 dotnet ef database update --project NeuroPath.Data --startup-project NeuroPath.API
+```
+
+3. Run the API:
+
+```bash
 dotnet run --project NeuroPath.API
 ```
 
-Set `JwtSettings:SecretKey` and the `SmtpSettings` in `NeuroPath.API/appsettings.json` (or with user secrets) before running.
+In Development, pending migrations are applied on startup and Swagger is available at `/swagger`. A health endpoint is available at `/health`.

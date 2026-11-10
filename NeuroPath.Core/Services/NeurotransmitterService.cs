@@ -1,15 +1,14 @@
 using Microsoft.EntityFrameworkCore;
 using NeuroPath.Core.Interfaces;
 using NeuroPath.Core.Models.DTOs.BrainScience;
-using NeuroPath.Data.Context;
 
 namespace NeuroPath.Core.Services;
 
 public class NeurotransmitterService : INeurotransmitterService
 {
-    private readonly NeuroPathDbContext _db;
+    private readonly INeuroPathDbContext _db;
 
-    public NeurotransmitterService(NeuroPathDbContext db) => _db = db;
+    public NeurotransmitterService(INeuroPathDbContext db) => _db = db;
 
     public async Task<List<NeurotransmitterDto>> GetAllAsync()
         => await _db.Neurotransmitters

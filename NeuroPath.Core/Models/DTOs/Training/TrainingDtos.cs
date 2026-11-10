@@ -59,17 +59,27 @@ public class CreateUserExerciseLogDto
     public int Score { get; set; }
     public int DurationSeconds { get; set; }
     public decimal AccuracyPercent { get; set; }
-    public int DifficultyAtCompletion { get; set; }
+    public int HintsUsed { get; set; }
 }
 
-public class ProgressSummaryDto
+public class ExerciseLogResultDto
 {
-    public int TotalPoints { get; set; }
-    public int StreakDays { get; set; }
-    public int ExercisesCompleted { get; set; }
-    public int QuizzesCompleted { get; set; }
-    public int CourseLessonsCompleted { get; set; }
+    public int LogId { get; set; }
+    public int PointsAwarded { get; set; }
+    public int SessionTotalPoints { get; set; }
+    public int SessionTotalExercises { get; set; }
+}
+
+public class SessionStatsDto
+{
+    public int TotalExercisesCompleted { get; set; }
     public decimal AverageAccuracy { get; set; }
     public int TotalTrainingMinutes { get; set; }
-    public string? TopBrainArea { get; set; }
+}
+
+public class AddPlanExerciseDto
+{
+    public int ExerciseId { get; set; }
+    public int DayOfWeek { get; set; }
+    public int OrderInDay { get; set; }
 }

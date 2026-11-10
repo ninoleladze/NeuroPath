@@ -10,4 +10,5 @@ public interface IFriendshipService
     Task<bool> AcceptRequestAsync(int requestId, string userId);
     Task<bool> RejectRequestAsync(int requestId, string userId);
     Task<bool> RemoveFriendAsync(string userId, string friendId);
+    Task<bool> AreFriendsAsync(string userId, string otherUserId);
 }

@@ -14,6 +14,8 @@ public class AchievementDto
     public int? PointsRequired { get; set; }
     public int? ExercisesRequired { get; set; }
     public int? StreakDaysRequired { get; set; }
+    public int? QuizzesRequired { get; set; }
+    public int? CoursesRequired { get; set; }
 }
 
 public class UserAchievementDto
@@ -89,4 +91,35 @@ public class ProgressSnapshotDto
     public int StreakDays { get; set; }
     public string? TopBrainArea { get; set; }
     public string? WeakestBrainArea { get; set; }
+}
+
+public class CreateAchievementDto
+{
+    public string Name { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string? IconUrl { get; set; }
+    public string Tier { get; set; } = "Bronze";
+    public int BonusPoints { get; set; }
+    public bool IsSecret { get; set; }
+    public int? PointsRequired { get; set; }
+    public int? ExercisesRequired { get; set; }
+    public int? StreakDaysRequired { get; set; }
+    public int? QuizzesRequired { get; set; }
+    public int? CoursesRequired { get; set; }
+}
+
+public class SetEquippedDto
+{
+    public bool IsEquipped { get; set; }
+}
+
+public class SaveShopItemDto
+{
+    public string Name { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public int Price { get; set; }
+    public string? ImageUrl { get; set; }
+    public string Category { get; set; } = string.Empty;
+    public int? StockQuantity { get; set; }
+    public bool IsActive { get; set; } = true;
 }

@@ -36,7 +36,6 @@ public class CreateQuizDto
     public int DifficultyLevelId { get; set; }
     public int? TimeLimitMinutes { get; set; }
     public int PassingScorePercent { get; set; } = 60;
-    public int TotalPoints { get; set; }
 }
 
 public class QuizQuestionDto
@@ -78,6 +77,7 @@ public class CreateQuizAnswerDto
 public class SubmitQuizDto
 {
     public int QuizId { get; set; }
+    public int? AttemptId { get; set; }
     public List<UserAnswerSubmission> Answers { get; set; } = new();
 }
 
@@ -97,6 +97,7 @@ public class QuizAttemptResultDto
     public decimal ScorePercent { get; set; }
     public bool IsPassed { get; set; }
     public int AttemptNumber { get; set; }
+    public int PointsAwarded { get; set; }
     public DateTime StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public List<QuizAnswerResultDto> AnswerResults { get; set; } = new();
@@ -109,4 +110,13 @@ public class QuizAnswerResultDto
     public int? SelectedAnswerId { get; set; }
     public bool IsCorrect { get; set; }
     public string? Explanation { get; set; }
+}
+
+public class QuizStartDto
+{
+    public int AttemptId { get; set; }
+    public int QuizId { get; set; }
+    public int AttemptNumber { get; set; }
+    public DateTime StartedAt { get; set; }
+    public DateTime? ExpiresAt { get; set; }
 }

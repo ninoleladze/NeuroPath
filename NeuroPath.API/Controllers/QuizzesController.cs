@@ -15,7 +15,11 @@ public class QuizzesController : ApiControllerBase
 
     [HttpGet]
     [AllowAnonymous]
-    public async Task<ActionResult<List<QuizDto>>> GetAll() => Ok(await _quizzes.GetAllAsync());
+    public async Task<ActionResult<List<QuizDto>>> GetAll([FromQuery] bool includeDrafts = false)
+    {
+        var drafts = includeDrafts && IsContentManager;
+        return Ok(await _quizzes.GetAllAsync(drafts, drafts ? CurrentUserId : null, IsAdmin));
+    }
 
     [HttpGet("{id:int}")]
     [Authorize]

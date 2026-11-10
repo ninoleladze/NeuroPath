@@ -23,10 +23,11 @@ public class QuizService : IQuizService
         _achievements = achievements;
     }
 
-    public async Task<List<QuizDto>> GetAllAsync()
+    public async Task<List<QuizDto>> GetAllAsync(bool includeDrafts = false, string? userId = null, bool isAdmin = false)
         => await _db.Quizzes.AsNoTracking()
-            .Where(q => q.IsPublished && q.IsActive)
-            .OrderByDescending(q => q.CreatedAt)
+            .Where(q => q.IsActive && (q.IsPublished || (includeDrafts && (isAdmin || q.CreatedByUserId == userId))))
+            .OrderBy(q => q.IsPublished)
+            .ThenByDescending(q => q.CreatedAt)
             .Select(q => new QuizDto
             {
                 Id = q.Id,

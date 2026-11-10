@@ -4,7 +4,7 @@ namespace NeuroPath.Core.Interfaces;
 
 public interface IQuizService
 {
-    Task<List<QuizDto>> GetAllAsync();
+    Task<List<QuizDto>> GetAllAsync(bool includeDrafts = false, string? userId = null, bool isAdmin = false);
     Task<QuizDetailDto?> GetByIdAsync(int id, bool includeUnpublished = false);
     Task<QuizDto> CreateAsync(CreateQuizDto dto, string userId);
     Task<QuizQuestionDto> AddQuestionAsync(int quizId, CreateQuizQuestionDto dto, string userId, bool isAdmin);

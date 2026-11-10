@@ -151,4 +151,33 @@ public class QuizServiceTests : IDisposable
 
         Assert.Equal(first.AttemptId, second.AttemptId);
     }
+
+    [Fact]
+    public async Task GetAll_ShowsDraftsOnlyToAdminsAndTheirAuthors()
+    {
+        await TestData.AddUserAsync(_database.Context, "trainer-a");
+        await TestData.AddUserAsync(_database.Context, "trainer-b");
+        var published = await TestData.AddPublishedQuizAsync(_database.Context, "trainer-a");
+        var draftA = await TestData.AddPublishedQuizAsync(_database.Context, "trainer-a");
+        var draftB = await TestData.AddPublishedQuizAsync(_database.Context, "trainer-b");
+        var archived = await TestData.AddPublishedQuizAsync(_database.Context, "trainer-a");
+        draftA.IsPublished = false;
+        draftB.IsPublished = false;
+        archived.IsPublished = false;
+        archived.IsActive = false;
+        await _database.Context.SaveChangesAsync();
+        var service = CreateService();
+
+        var anonymous = (await service.GetAllAsync()).Select(q => q.Id).ToList();
+        var ignoredFlag = (await service.GetAllAsync(includeDrafts: false, userId: "trainer-a")).Select(q => q.Id).ToList();
+        var trainer = (await service.GetAllAsync(includeDrafts: true, userId: "trainer-a")).Select(q => q.Id).ToList();
+        var admin = (await service.GetAllAsync(includeDrafts: true, userId: "admin", isAdmin: true)).Select(q => q.Id).ToList();
+
+        Assert.Equal(new[] { published.Id }, anonymous);
+        Assert.Equal(new[] { published.Id }, ignoredFlag);
+        Assert.Equal(new[] { draftA.Id, published.Id }.OrderBy(x => x), trainer.OrderBy(x => x));
+        Assert.Equal(new[] { draftA.Id, draftB.Id, published.Id }.OrderBy(x => x), admin.OrderBy(x => x));
+        Assert.DoesNotContain(archived.Id, admin);
+        Assert.False((await service.GetAllAsync(includeDrafts: true, userId: "trainer-a")).First().IsPublished);
+    }
 }

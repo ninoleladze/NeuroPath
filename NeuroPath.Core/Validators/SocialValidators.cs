@@ -79,3 +79,8 @@ public class SetRoleDtoValidator : AbstractValidator<SetRoleDto>
         => RuleFor(x => x.Role).NotEmpty().Must(r => AppRoles.All.Contains(r, StringComparer.OrdinalIgnoreCase))
             .WithMessage($"Role must be one of: {string.Join(", ", AppRoles.All)}.");
 }
+
+public class DeleteAccountDtoValidator : AbstractValidator<DeleteAccountDto>
+{
+    public DeleteAccountDtoValidator() => RuleFor(x => x.Password).NotEmpty().MaximumLength(128);
+}

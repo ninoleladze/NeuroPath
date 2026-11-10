@@ -137,6 +137,34 @@ public class ExerciseService : IExerciseService
         return new ExerciseHintDto { Id = hint.Id, HintText = hint.HintText, HintOrder = hint.HintOrder, PointPenalty = hint.PointPenalty };
     }
 
+    public async Task<ExerciseHintDto?> UpdateHintAsync(int exerciseId, int hintId, CreateExerciseHintDto dto, string userId, bool isAdmin)
+    {
+        var exercise = await _db.Exercises.AsNoTracking().FirstOrDefaultAsync(e => e.Id == exerciseId)
+            ?? throw new NotFoundException("Exercise not found.");
+        EnsureCanModify(exercise, userId, isAdmin);
+
+        var hint = await _db.ExerciseHints.FirstOrDefaultAsync(h => h.Id == hintId && h.ExerciseId == exerciseId);
+        if (hint == null) return null;
+        hint.HintText = dto.HintText;
+        hint.HintOrder = dto.HintOrder;
+        hint.PointPenalty = dto.PointPenalty;
+        await _db.SaveChangesAsync();
+        return new ExerciseHintDto { Id = hint.Id, HintText = hint.HintText, HintOrder = hint.HintOrder, PointPenalty = hint.PointPenalty };
+    }
+
+    public async Task<bool> DeleteHintAsync(int exerciseId, int hintId, string userId, bool isAdmin)
+    {
+        var exercise = await _db.Exercises.AsNoTracking().FirstOrDefaultAsync(e => e.Id == exerciseId);
+        if (exercise == null) return false;
+        EnsureCanModify(exercise, userId, isAdmin);
+
+        var hint = await _db.ExerciseHints.FirstOrDefaultAsync(h => h.Id == hintId && h.ExerciseId == exerciseId);
+        if (hint == null) return false;
+        _db.ExerciseHints.Remove(hint);
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
     public async Task<List<ExerciseReviewDto>> GetReviewsAsync(int exerciseId)
         => await _db.ExerciseReviews.AsNoTracking()
             .Where(r => r.ExerciseId == exerciseId && r.IsApproved)

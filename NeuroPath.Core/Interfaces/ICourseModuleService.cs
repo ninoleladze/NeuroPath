@@ -11,6 +11,8 @@ public interface ICourseModuleService
     Task<bool> DeleteAsync(int id, string userId, bool isAdmin);
     Task<bool> PublishAsync(int id, string userId, bool isAdmin);
     Task<ModuleLessonDto> AddLessonAsync(int moduleId, CreateModuleLessonDto dto, string userId, bool isAdmin);
+    Task<ModuleLessonDto?> UpdateLessonAsync(int moduleId, int lessonId, CreateModuleLessonDto dto, string userId, bool isAdmin);
+    Task<bool> DeleteLessonAsync(int moduleId, int lessonId, string userId, bool isAdmin);
     Task<UserModuleProgressDto> EnrollAsync(int moduleId, string userId);
     Task<UserModuleProgressDto?> CompleteLessonAsync(int moduleId, int lessonId, string userId);
     Task<List<UserModuleProgressDto>> GetUserProgressAsync(string userId);

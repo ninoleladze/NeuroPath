@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using NeuroPath.Core.Common;
 using NeuroPath.Core.Enums;
@@ -28,20 +29,7 @@ public class QuizService : IQuizService
             .Where(q => q.IsActive && (q.IsPublished || (includeDrafts && (isAdmin || q.CreatedByUserId == userId))))
             .OrderBy(q => q.IsPublished)
             .ThenByDescending(q => q.CreatedAt)
-            .Select(q => new QuizDto
-            {
-                Id = q.Id,
-                Title = q.Title,
-                Description = q.Description,
-                DifficultyName = q.DifficultyLevel.Name,
-                TimeLimitMinutes = q.TimeLimitMinutes,
-                PassingScorePercent = q.PassingScorePercent,
-                TotalPoints = q.TotalPoints,
-                IsActive = q.IsActive,
-                IsPublished = q.IsPublished,
-                QuestionCount = q.Questions.Count,
-                CreatedAt = q.CreatedAt
-            })
+            .Select(ToQuizDto)
             .ToListAsync();
 
     public async Task<QuizDetailDto?> GetByIdAsync(int id, bool includeUnpublished = false)
@@ -138,18 +126,87 @@ public class QuizService : IQuizService
         quiz.TotalPoints += question.Points;
         await _db.SaveChangesAsync();
 
-        return new QuizQuestionDto
-        {
-            Id = question.Id,
-            QuestionText = question.QuestionText,
-            QuestionType = question.QuestionType,
-            Points = question.Points,
-            OrderIndex = question.OrderIndex,
-            ImageUrl = question.ImageUrl,
-            Answers = question.Answers.OrderBy(a => a.OrderIndex)
-                .Select(a => new QuizAnswerDto { Id = a.Id, AnswerText = a.AnswerText, OrderIndex = a.OrderIndex })
-                .ToList()
-        };
+        return ToQuestionDto(question);
+    }
+
+    public async Task<QuizDto?> UpdateAsync(int id, CreateQuizDto dto, string userId, bool isAdmin)
+    {
+        var quiz = await _db.Quizzes.FirstOrDefaultAsync(q => q.Id == id && q.IsActive);
+        if (quiz == null) return null;
+        EnsureCanModify(quiz, userId, isAdmin);
+        EnsureDraft(quiz);
+        if (!await _db.DifficultyLevels.AnyAsync(d => d.Id == dto.DifficultyLevelId))
+            throw new BusinessRuleException($"Difficulty level {dto.DifficultyLevelId} does not exist.");
+
+        quiz.Title = dto.Title;
+        quiz.Description = dto.Description;
+        quiz.DifficultyLevelId = dto.DifficultyLevelId;
+        quiz.TimeLimitMinutes = dto.TimeLimitMinutes;
+        quiz.PassingScorePercent = dto.PassingScorePercent;
+        await _db.SaveChangesAsync();
+
+        return await _db.Quizzes.AsNoTracking().Where(q => q.Id == id).Select(ToQuizDto).FirstAsync();
+    }
+
+    public async Task<QuizQuestionDto?> UpdateQuestionAsync(int quizId, int questionId, CreateQuizQuestionDto dto, string userId, bool isAdmin)
+    {
+        var quiz = await _db.Quizzes.FirstOrDefaultAsync(q => q.Id == quizId && q.IsActive)
+            ?? throw new NotFoundException("Quiz not found.");
+        EnsureCanModify(quiz, userId, isAdmin);
+        EnsureDraft(quiz);
+
+        var question = await _db.QuizQuestions.Include(q => q.Answers).FirstOrDefaultAsync(q => q.Id == questionId && q.QuizId == quizId);
+        if (question == null) return null;
+
+        question.QuestionText = dto.QuestionText;
+        question.QuestionType = dto.QuestionType;
+        question.Points = dto.Points;
+        question.OrderIndex = dto.OrderIndex;
+        question.Explanation = dto.Explanation;
+        question.ImageUrl = dto.ImageUrl;
+        _db.QuizAnswers.RemoveRange(question.Answers);
+        question.Answers = dto.Answers
+            .Select(a => new QuizAnswer { AnswerText = a.AnswerText, IsCorrect = a.IsCorrect, OrderIndex = a.OrderIndex })
+            .ToList();
+
+        await using var transaction = await _db.Database.BeginTransactionAsync();
+        await _db.SaveChangesAsync();
+        await RecalculateTotalPointsAsync(quizId);
+        await transaction.CommitAsync();
+
+        return ToQuestionDto(question);
+    }
+
+    public async Task<bool> DeleteQuestionAsync(int quizId, int questionId, string userId, bool isAdmin)
+    {
+        var quiz = await _db.Quizzes.FirstOrDefaultAsync(q => q.Id == quizId && q.IsActive);
+        if (quiz == null) return false;
+        EnsureCanModify(quiz, userId, isAdmin);
+        EnsureDraft(quiz);
+
+        var question = await _db.QuizQuestions.FirstOrDefaultAsync(q => q.Id == questionId && q.QuizId == quizId);
+        if (question == null) return false;
+
+        await using var transaction = await _db.Database.BeginTransactionAsync();
+        _db.QuizQuestions.Remove(question);
+        await _db.SaveChangesAsync();
+        await RecalculateTotalPointsAsync(quizId);
+        await transaction.CommitAsync();
+        return true;
+    }
+
+    public async Task<bool> UnpublishAsync(int id, string userId, bool isAdmin)
+    {
+        var quiz = await _db.Quizzes.FirstOrDefaultAsync(q => q.Id == id && q.IsActive);
+        if (quiz == null) return false;
+        EnsureCanModify(quiz, userId, isAdmin);
+        if (!quiz.IsPublished) return true;
+        if (await _db.UserQuizAttempts.AnyAsync(a => a.QuizId == id))
+            throw new BusinessRuleException("This quiz already has attempts. Delete it to archive it and create a new version instead.");
+
+        quiz.IsPublished = false;
+        await _db.SaveChangesAsync();
+        return true;
     }
 
     public async Task<bool> PublishAsync(int id, string userId, bool isAdmin)
@@ -375,6 +432,46 @@ public class QuizService : IQuizService
         StartedAt = attempt.StartedAt,
         ExpiresAt = timeLimitMinutes is > 0 ? attempt.StartedAt.AddMinutes(timeLimitMinutes.Value) : null
     };
+
+    private static QuizQuestionDto ToQuestionDto(QuizQuestion question) => new()
+    {
+        Id = question.Id,
+        QuestionText = question.QuestionText,
+        QuestionType = question.QuestionType,
+        Points = question.Points,
+        OrderIndex = question.OrderIndex,
+        ImageUrl = question.ImageUrl,
+        Answers = question.Answers.OrderBy(a => a.OrderIndex)
+            .Select(a => new QuizAnswerDto { Id = a.Id, AnswerText = a.AnswerText, OrderIndex = a.OrderIndex })
+            .ToList()
+    };
+
+    private async Task RecalculateTotalPointsAsync(int quizId)
+    {
+        var total = await _db.QuizQuestions.Where(q => q.QuizId == quizId).SumAsync(q => (int?)q.Points) ?? 0;
+        await _db.Quizzes.Where(q => q.Id == quizId).ExecuteUpdateAsync(s => s.SetProperty(q => q.TotalPoints, total));
+    }
+
+    private static readonly Expression<Func<Quiz, QuizDto>> ToQuizDto = q => new QuizDto
+    {
+        Id = q.Id,
+        Title = q.Title,
+        Description = q.Description,
+        DifficultyName = q.DifficultyLevel.Name,
+        TimeLimitMinutes = q.TimeLimitMinutes,
+        PassingScorePercent = q.PassingScorePercent,
+        TotalPoints = q.TotalPoints,
+        IsActive = q.IsActive,
+        IsPublished = q.IsPublished,
+        QuestionCount = q.Questions.Count,
+        CreatedAt = q.CreatedAt
+    };
+
+    private static void EnsureDraft(Quiz quiz)
+    {
+        if (quiz.IsPublished)
+            throw new BusinessRuleException("A published quiz cannot be edited. Unpublish it first.");
+    }
 
     private static void EnsureCanModify(Quiz quiz, string userId, bool isAdmin)
     {

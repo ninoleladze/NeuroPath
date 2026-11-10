@@ -57,6 +57,16 @@ public class ExercisesController : ApiControllerBase
     public async Task<ActionResult<ExerciseHintDto>> AddHint(int id, CreateExerciseHintDto dto)
         => Ok(await _exercises.AddHintAsync(id, dto, CurrentUserId, IsAdmin));
 
+    [HttpPut("{id:int}/hints/{hintId:int}")]
+    [Authorize(Roles = AppRoles.ContentManagers)]
+    public async Task<ActionResult<ExerciseHintDto>> UpdateHint(int id, int hintId, CreateExerciseHintDto dto)
+        => OkOrNotFound(await _exercises.UpdateHintAsync(id, hintId, dto, CurrentUserId, IsAdmin));
+
+    [HttpDelete("{id:int}/hints/{hintId:int}")]
+    [Authorize(Roles = AppRoles.ContentManagers)]
+    public async Task<IActionResult> DeleteHint(int id, int hintId)
+        => NoContentOrNotFound(await _exercises.DeleteHintAsync(id, hintId, CurrentUserId, IsAdmin));
+
     [HttpGet("{id:int}/reviews")]
     [AllowAnonymous]
     public async Task<ActionResult<List<ExerciseReviewDto>>> GetReviews(int id) => Ok(await _exercises.GetReviewsAsync(id));

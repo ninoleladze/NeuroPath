@@ -12,4 +12,5 @@ public interface IUserService
     Task<List<UserDto>> GetAllAsync(int page = 1, int pageSize = 20);
     Task<bool> SetBlockedAsync(string userId, bool isBlocked, string actingAdminId);
     Task<bool> SetRoleAsync(string userId, string role, string actingAdminId);
+    Task<bool> DeleteAccountAsync(string userId, string password);
 }

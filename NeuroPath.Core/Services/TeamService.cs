@@ -76,6 +76,56 @@ public class TeamService : ITeamService
         };
     }
 
+    public async Task<TeamDto?> UpdateAsync(int teamId, CreateTeamDto dto, string requestingUserId)
+    {
+        var team = await _db.Teams.FirstOrDefaultAsync(t => t.Id == teamId && t.IsActive);
+        if (team == null) return null;
+        await EnsureRoleAsync(teamId, requestingUserId, TeamRole.Leader);
+
+        var name = dto.Name.Trim();
+        if (name != team.Name && await _db.Teams.AnyAsync(t => t.Name == name && t.Id != teamId))
+            throw new ConflictException("A team with this name already exists.");
+        var memberCount = await _db.TeamMembers.CountAsync(m => m.TeamId == teamId);
+        if (dto.MaxMembers < memberCount)
+            throw new BusinessRuleException($"The team already has {memberCount} members.");
+
+        team.Name = name;
+        team.Description = dto.Description;
+        team.MaxMembers = dto.MaxMembers;
+        await _db.SaveChangesAsync();
+        return await GetByIdAsync(teamId);
+    }
+
+    public async Task<bool> ArchiveAsync(int teamId, string requestingUserId, bool isAdmin)
+    {
+        var team = await _db.Teams.FirstOrDefaultAsync(t => t.Id == teamId && t.IsActive);
+        if (team == null) return false;
+        if (!isAdmin) await EnsureRoleAsync(teamId, requestingUserId, TeamRole.Leader);
+
+        team.IsActive = false;
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> RemoveMemberAsync(int teamId, string targetUserId, string requestingUserId)
+    {
+        if (targetUserId == requestingUserId)
+            throw new BusinessRuleException("Use leave to exit the team yourself.");
+
+        var requester = await _db.TeamMembers.FirstOrDefaultAsync(m => m.TeamId == teamId && m.UserId == requestingUserId);
+        if (requester == null || requester.Role is not (TeamRole.Leader or TeamRole.CoLeader))
+            throw new ForbiddenException("Only the team leader or a co-leader can remove members.");
+
+        var target = await _db.TeamMembers.FirstOrDefaultAsync(m => m.TeamId == teamId && m.UserId == targetUserId);
+        if (target == null) return false;
+        if (target.Role == TeamRole.Leader || (target.Role == TeamRole.CoLeader && requester.Role != TeamRole.Leader))
+            throw new ForbiddenException("You cannot remove a member with the same or a higher role.");
+
+        _db.TeamMembers.Remove(target);
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
     public async Task<bool> JoinAsync(int teamId, string userId)
     {
         var team = await _db.Teams.AsNoTracking()
@@ -138,6 +188,12 @@ public class TeamService : ITeamService
 
         await _db.SaveChangesAsync();
         return true;
+    }
+
+    private async Task EnsureRoleAsync(int teamId, string userId, TeamRole role)
+    {
+        if (!await _db.TeamMembers.AnyAsync(m => m.TeamId == teamId && m.UserId == userId && m.Role == role))
+            throw new ForbiddenException("Only the team leader can do this.");
     }
 
     public async Task<List<TeamMemberDto>> GetMembersAsync(int teamId)

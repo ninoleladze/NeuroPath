@@ -84,6 +84,20 @@ public class TeamsController : ApiControllerBase
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 
+    [HttpPut("{id:int}")]
+    [Authorize]
+    public async Task<ActionResult<TeamDto>> Update(int id, CreateTeamDto dto)
+        => OkOrNotFound(await _teams.UpdateAsync(id, dto, CurrentUserId));
+
+    [HttpDelete("{id:int}")]
+    [Authorize]
+    public async Task<IActionResult> Archive(int id) => NoContentOrNotFound(await _teams.ArchiveAsync(id, CurrentUserId, IsAdmin));
+
+    [HttpDelete("{id:int}/members/{userId}")]
+    [Authorize]
+    public async Task<IActionResult> RemoveMember(int id, string userId)
+        => NoContentOrNotFound(await _teams.RemoveMemberAsync(id, userId, CurrentUserId));
+
     [HttpPost("{id:int}/join")]
     [Authorize]
     public async Task<IActionResult> Join(int id)

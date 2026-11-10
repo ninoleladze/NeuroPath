@@ -4,10 +4,8 @@
 
 namespace NeuroPath.Data.Migrations
 {
-    /// <inheritdoc />
     public partial class AuditFixes : Migration
     {
-        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropIndex(
@@ -37,7 +35,6 @@ namespace NeuroPath.Data.Migrations
                 filter: "[NormalizedEmail] IS NOT NULL");
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropIndex(

@@ -12,11 +12,15 @@ public class UserService : IUserService
 {
     private readonly UserManager<User> _userManager;
     private readonly INeuroPathDbContext _db;
+    private readonly ITeamService _teams;
+    private readonly IFileUploadService _files;
 
-    public UserService(UserManager<User> userManager, INeuroPathDbContext db)
+    public UserService(UserManager<User> userManager, INeuroPathDbContext db, ITeamService teams, IFileUploadService files)
     {
         _userManager = userManager;
         _db = db;
+        _teams = teams;
+        _files = files;
     }
 
     public async Task<UserDto?> GetByIdAsync(string id)
@@ -137,6 +141,64 @@ public class UserService : IUserService
             EnsureSucceeded(await _userManager.RemoveFromRolesAsync(user, currentRoles));
         EnsureSucceeded(await _userManager.AddToRoleAsync(user, normalizedRole));
         EnsureSucceeded(await _userManager.UpdateSecurityStampAsync(user));
+        await transaction.CommitAsync();
+        return true;
+    }
+
+    public async Task<bool> DeleteAccountAsync(string userId, string password)
+    {
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null || !user.IsActive) return false;
+        if (!await _userManager.CheckPasswordAsync(user, password))
+            throw new BusinessRuleException("The password is incorrect.");
+
+        if (await _userManager.IsInRoleAsync(user, AppRoles.Admin) && (await _userManager.GetUsersInRoleAsync(AppRoles.Admin)).Count(a => a.IsActive) <= 1)
+            throw new BusinessRuleException("The last administrator cannot delete their account.");
+
+        foreach (var teamId in await _db.TeamMembers.Where(m => m.UserId == userId).Select(m => m.TeamId).ToListAsync())
+            await _teams.LeaveAsync(teamId, userId);
+        foreach (var fileId in await _db.UploadedFiles.Where(f => f.UserId == userId).Select(f => f.Id).ToListAsync())
+            await _files.DeleteFileAsync(fileId, userId);
+
+        await using var transaction = await _db.Database.BeginTransactionAsync();
+
+        await _db.Friendships.Where(f => f.UserId == userId || f.FriendId == userId).ExecuteDeleteAsync();
+        await _db.FriendRequests.Where(r => r.SenderId == userId || r.ReceiverId == userId).ExecuteDeleteAsync();
+        await _db.Notifications.Where(n => n.UserId == userId).ExecuteDeleteAsync();
+        await _db.Bookmarks.Where(b => b.UserId == userId).ExecuteDeleteAsync();
+        await _db.MoodLogs.Where(m => m.UserId == userId).ExecuteDeleteAsync();
+        await _db.RefreshTokens.Where(t => t.UserId == userId).ExecuteDeleteAsync();
+        await _db.EmailVerificationTokens.Where(t => t.UserId == userId).ExecuteDeleteAsync();
+        await _db.PasswordResetTokens.Where(t => t.UserId == userId).ExecuteDeleteAsync();
+        await _db.UserProfiles.Where(p => p.UserId == userId).ExecuteUpdateAsync(s => s
+            .SetProperty(p => p.FirstName, "Deleted")
+            .SetProperty(p => p.LastName, "User")
+            .SetProperty(p => p.Bio, (string?)null)
+            .SetProperty(p => p.DateOfBirth, (DateTime?)null)
+            .SetProperty(p => p.Country, (string?)null)
+            .SetProperty(p => p.City, (string?)null)
+            .SetProperty(p => p.Occupation, (string?)null)
+            .SetProperty(p => p.CognitiveGoal, (string?)null));
+        await _db.UserSettings.Where(s => s.UserId == userId).ExecuteUpdateAsync(s => s
+            .SetProperty(x => x.ShowOnLeaderboard, false)
+            .SetProperty(x => x.EmailNotifications, false)
+            .SetProperty(x => x.PushNotifications, false)
+            .SetProperty(x => x.StreakReminders, false)
+            .SetProperty(x => x.WeeklySummary, false)
+            .SetProperty(x => x.ProfileVisibility, "private"));
+
+        var anonymousId = user.Id.Replace("-", string.Empty);
+        user.UserName = $"deleted-{anonymousId}";
+        user.Email = $"{anonymousId}@deleted.invalid";
+        user.PhoneNumber = null;
+        user.AvatarUrl = null;
+        user.IsActive = false;
+        user.EmailConfirmed = false;
+        user.IsEmailVerified = false;
+        EnsureSucceeded(await _userManager.UpdateAsync(user));
+        EnsureSucceeded(await _userManager.RemovePasswordAsync(user));
+        EnsureSucceeded(await _userManager.UpdateSecurityStampAsync(user));
+
         await transaction.CommitAsync();
         return true;
     }

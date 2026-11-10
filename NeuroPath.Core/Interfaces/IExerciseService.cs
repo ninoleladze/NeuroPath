@@ -11,6 +11,8 @@ public interface IExerciseService
     Task<bool> DeleteAsync(int id, string userId, bool isAdmin);
     Task<List<ExerciseHintDto>> GetHintsAsync(int exerciseId);
     Task<ExerciseHintDto> AddHintAsync(int exerciseId, CreateExerciseHintDto dto, string userId, bool isAdmin);
+    Task<ExerciseHintDto?> UpdateHintAsync(int exerciseId, int hintId, CreateExerciseHintDto dto, string userId, bool isAdmin);
+    Task<bool> DeleteHintAsync(int exerciseId, int hintId, string userId, bool isAdmin);
     Task<List<ExerciseReviewDto>> GetReviewsAsync(int exerciseId);
     Task<ExerciseReviewDto> AddReviewAsync(int exerciseId, CreateExerciseReviewDto dto, string userId);
     Task<bool> ApproveReviewAsync(int reviewId);

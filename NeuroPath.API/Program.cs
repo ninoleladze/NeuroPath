@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +14,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using NeuroPath.API.BackgroundJobs;
 using NeuroPath.API.Filters;
+using NeuroPath.API.HealthChecks;
 using NeuroPath.API.Middlewares;
 using NeuroPath.Core.Interfaces;
 using NeuroPath.Core.Models.Domain.Identity;
@@ -25,6 +27,7 @@ using NeuroPath.Data.Seed;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.ConfigureKestrel(options => options.AddServerHeader = false);
 
 builder.Host.UseSerilog((context, logger) => logger
     .ReadFrom.Configuration(context.Configuration)
@@ -188,7 +191,8 @@ builder.Services.AddHostedService<MaintenanceWorker>();
 builder.Services.AddValidatorsFromAssemblyContaining<RegisterDtoValidator>();
 builder.Services.AddControllers(options => options.Filters.Add<ValidationFilter>())
     .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
-builder.Services.AddHealthChecks();
+builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseHealthCheck>(DatabaseHealthCheck.Name, tags: new[] { DatabaseHealthCheck.ReadinessTag });
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -216,6 +220,7 @@ builder.Services.AddCors(options => options.AddPolicy("ClientApp", policy =>
 var app = builder.Build();
 
 app.UseForwardedHeaders();
+app.UseMiddleware<SecurityHeadersMiddleware>(new PathString(app.Configuration["FileUploadSettings:PublicBasePath"] ?? "/uploads"));
 app.UseSerilogRequestLogging();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
@@ -241,7 +246,7 @@ app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(uploadSettings.RootPath),
     RequestPath = uploadSettings.PublicBasePath,
-    OnPrepareResponse = context => context.Context.Response.Headers["X-Content-Type-Options"] = "nosniff"
+    OnPrepareResponse = context => context.Context.Response.Headers.ContentDisposition = context.File.Name.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) ? "attachment" : "inline"
 });
 
 app.UseCors("ClientApp");
@@ -249,7 +254,8 @@ app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();
 
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health", new HealthCheckOptions { Predicate = _ => false });
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains(DatabaseHealthCheck.ReadinessTag) });
 app.MapControllers();
 
 var seedSection = app.Configuration.GetSection("Seed");

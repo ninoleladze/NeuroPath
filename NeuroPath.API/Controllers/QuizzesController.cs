@@ -39,6 +39,25 @@ public class QuizzesController : ApiControllerBase
     public async Task<ActionResult<QuizQuestionDto>> AddQuestion(int id, CreateQuizQuestionDto dto)
         => Ok(await _quizzes.AddQuestionAsync(id, dto, CurrentUserId, IsAdmin));
 
+    [HttpPut("{id:int}")]
+    [Authorize(Roles = AppRoles.ContentManagers)]
+    public async Task<ActionResult<QuizDto>> Update(int id, CreateQuizDto dto)
+        => OkOrNotFound(await _quizzes.UpdateAsync(id, dto, CurrentUserId, IsAdmin));
+
+    [HttpPut("{id:int}/questions/{questionId:int}")]
+    [Authorize(Roles = AppRoles.ContentManagers)]
+    public async Task<ActionResult<QuizQuestionDto>> UpdateQuestion(int id, int questionId, CreateQuizQuestionDto dto)
+        => OkOrNotFound(await _quizzes.UpdateQuestionAsync(id, questionId, dto, CurrentUserId, IsAdmin));
+
+    [HttpDelete("{id:int}/questions/{questionId:int}")]
+    [Authorize(Roles = AppRoles.ContentManagers)]
+    public async Task<IActionResult> DeleteQuestion(int id, int questionId)
+        => NoContentOrNotFound(await _quizzes.DeleteQuestionAsync(id, questionId, CurrentUserId, IsAdmin));
+
+    [HttpPost("{id:int}/unpublish")]
+    [Authorize(Roles = AppRoles.ContentManagers)]
+    public async Task<IActionResult> Unpublish(int id) => NoContentOrNotFound(await _quizzes.UnpublishAsync(id, CurrentUserId, IsAdmin));
+
     [HttpPost("{id:int}/publish")]
     [Authorize(Roles = AppRoles.ContentManagers)]
     public async Task<IActionResult> Publish(int id) => NoContentOrNotFound(await _quizzes.PublishAsync(id, CurrentUserId, IsAdmin));

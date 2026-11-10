@@ -115,4 +115,35 @@ public class ApiBehaviorTests : IClassFixture<ApiFactory>
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
+
+    [Fact]
+    public async Task Readiness_ChecksTheDatabase()
+    {
+        var response = await _factory.CreateClient().GetAsync("/health/ready");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("Healthy", await response.Content.ReadAsStringAsync());
+    }
+
+    [Theory]
+    [InlineData("/api/exercises", HttpStatusCode.OK)]
+    [InlineData("/api/users/me", HttpStatusCode.Unauthorized)]
+    [InlineData("/api/exercises/999999", HttpStatusCode.NotFound)]
+    public async Task Responses_CarrySecurityHeaders(string url, HttpStatusCode expectedStatus)
+    {
+        var response = await _factory.CreateClient().GetAsync(url);
+
+        Assert.Equal(expectedStatus, response.StatusCode);
+        Assert.Equal("nosniff", Header(response, "X-Content-Type-Options"));
+        Assert.Equal("DENY", Header(response, "X-Frame-Options"));
+        Assert.Equal("no-referrer", Header(response, "Referrer-Policy"));
+        Assert.Contains("frame-ancestors 'none'", Header(response, "Content-Security-Policy"));
+        Assert.Contains("no-store", response.Headers.CacheControl?.ToString());
+        Assert.False(response.Headers.Contains("Server"));
+    }
+
+    private static string? Header(HttpResponseMessage response, string name)
+        => response.Headers.TryGetValues(name, out var values) || response.Content.Headers.TryGetValues(name, out values)
+            ? string.Join(",", values)
+            : null;
 }

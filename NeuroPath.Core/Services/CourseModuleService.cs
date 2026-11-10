@@ -151,16 +151,54 @@ public class CourseModuleService : ICourseModuleService
             .ExecuteUpdateAsync(s => s.SetProperty(p => p.TotalLessons, p => p.TotalLessons + 1));
         await transaction.CommitAsync();
 
-        return new ModuleLessonDto
-        {
-            Id = lesson.Id,
-            Title = lesson.Title,
-            Content = lesson.Content,
-            VideoUrl = lesson.VideoUrl,
-            DurationMinutes = lesson.DurationMinutes,
-            OrderIndex = lesson.OrderIndex,
-            Points = lesson.Points
-        };
+        return ToLessonDto(lesson);
+    }
+
+    public async Task<ModuleLessonDto?> UpdateLessonAsync(int moduleId, int lessonId, CreateModuleLessonDto dto, string userId, bool isAdmin)
+    {
+        var module = await _db.CourseModules.FirstOrDefaultAsync(c => c.Id == moduleId)
+            ?? throw new NotFoundException("Course module not found.");
+        EnsureCanModify(module, userId, isAdmin);
+
+        var lesson = await _db.ModuleLessons.FirstOrDefaultAsync(l => l.Id == lessonId && l.CourseModuleId == moduleId);
+        if (lesson == null) return null;
+        if (lesson.Points != dto.Points && await _db.UserLessonCompletions.AnyAsync(c => c.ModuleLessonId == lessonId))
+            throw new BusinessRuleException("Points cannot be changed after learners have completed this lesson.");
+
+        lesson.Title = dto.Title;
+        lesson.Content = dto.Content;
+        lesson.VideoUrl = dto.VideoUrl;
+        lesson.DurationMinutes = dto.DurationMinutes;
+        lesson.OrderIndex = dto.OrderIndex;
+        lesson.Points = dto.Points;
+        await _db.SaveChangesAsync();
+        return ToLessonDto(lesson);
+    }
+
+    public async Task<bool> DeleteLessonAsync(int moduleId, int lessonId, string userId, bool isAdmin)
+    {
+        var module = await _db.CourseModules.FirstOrDefaultAsync(c => c.Id == moduleId);
+        if (module == null) return false;
+        EnsureCanModify(module, userId, isAdmin);
+
+        var lesson = await _db.ModuleLessons.FirstOrDefaultAsync(l => l.Id == lessonId && l.CourseModuleId == moduleId);
+        if (lesson == null) return false;
+        if (await _db.UserLessonCompletions.AnyAsync(c => c.ModuleLessonId == lessonId))
+            throw new ConflictException("Learners have already completed this lesson, so it cannot be deleted.");
+        if (module.IsPublished && await _db.ModuleLessons.CountAsync(l => l.CourseModuleId == moduleId) == 1)
+            throw new BusinessRuleException("A published module must keep at least one lesson.");
+
+        await using var transaction = await _db.Database.BeginTransactionAsync();
+        await _db.UserModuleProgresses
+            .Where(p => p.CurrentLessonId == lessonId)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.CurrentLessonId, (int?)null));
+        await _db.UserModuleProgresses
+            .Where(p => p.CourseModuleId == moduleId && p.TotalLessons > 0)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.TotalLessons, p => p.TotalLessons - 1));
+        _db.ModuleLessons.Remove(lesson);
+        await _db.SaveChangesAsync();
+        await transaction.CommitAsync();
+        return true;
     }
 
     public async Task<UserModuleProgressDto> EnrollAsync(int moduleId, string userId)
@@ -298,6 +336,17 @@ public class CourseModuleService : ICourseModuleService
                 CreatedAt = c.CreatedAt
             })
             .FirstAsync();
+
+    private static ModuleLessonDto ToLessonDto(ModuleLesson lesson) => new()
+    {
+        Id = lesson.Id,
+        Title = lesson.Title,
+        Content = lesson.Content,
+        VideoUrl = lesson.VideoUrl,
+        DurationMinutes = lesson.DurationMinutes,
+        OrderIndex = lesson.OrderIndex,
+        Points = lesson.Points
+    };
 
     private static void Apply(CourseModule module, CreateCourseModuleDto dto)
     {

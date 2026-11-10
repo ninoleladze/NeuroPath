@@ -91,6 +91,43 @@ public class SkillAssessmentService : ISkillAssessmentService
         return (await GetSummaryAsync(assessment.Id))!;
     }
 
+    public async Task<SkillAssessmentDto?> UpdateAsync(int id, CreateSkillAssessmentDto dto)
+    {
+        var assessment = await _db.SkillAssessments.FirstOrDefaultAsync(a => a.Id == id && a.IsActive);
+        if (assessment == null) return null;
+        if (!await _db.CognitiveSkills.AnyAsync(c => c.Id == dto.CognitiveSkillId))
+            throw new BusinessRuleException($"Cognitive skill {dto.CognitiveSkillId} does not exist.");
+
+        var scoringChanged = assessment.PassingScorePercent != dto.PassingScorePercent || assessment.CognitiveSkillId != dto.CognitiveSkillId;
+        if (scoringChanged && await _db.UserAssessmentResults.AnyAsync(r => r.SkillAssessmentId == id))
+            throw new BusinessRuleException("The skill and passing score cannot change after users have taken this assessment.");
+
+        assessment.Title = dto.Title;
+        assessment.Description = dto.Description;
+        assessment.CognitiveSkillId = dto.CognitiveSkillId;
+        assessment.AssessmentType = dto.AssessmentType;
+        assessment.TimeLimitMinutes = dto.TimeLimitMinutes;
+        assessment.PassingScorePercent = dto.PassingScorePercent;
+        await _db.SaveChangesAsync();
+        return await GetSummaryAsync(id);
+    }
+
+    public async Task<bool> DeleteAsync(int id)
+    {
+        var assessment = await _db.SkillAssessments.FirstOrDefaultAsync(a => a.Id == id);
+        if (assessment == null) return false;
+
+        var inUse = await _db.UserAssessmentResults.AnyAsync(r => r.SkillAssessmentId == id)
+            || await _db.Certificates.AnyAsync(c => c.RequiredAssessmentId == id);
+        if (inUse)
+            assessment.IsActive = false;
+        else
+            _db.SkillAssessments.Remove(assessment);
+
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
     public async Task<AssessmentQuestionDto> AddQuestionAsync(int assessmentId, CreateAssessmentQuestionDto dto)
     {
         var assessment = await _db.SkillAssessments.FirstOrDefaultAsync(a => a.Id == assessmentId)

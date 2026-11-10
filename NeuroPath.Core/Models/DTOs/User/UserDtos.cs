@@ -70,6 +70,11 @@ public class SetRoleDto
     public string Role { get; set; } = string.Empty;
 }
 
+public class DeleteAccountDto
+{
+    public string Password { get; set; } = string.Empty;
+}
+
 public class SetBlockedDto
 {
     public bool IsBlocked { get; set; }

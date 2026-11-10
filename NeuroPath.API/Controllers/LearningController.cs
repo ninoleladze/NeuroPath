@@ -49,6 +49,16 @@ public class CoursesController : ApiControllerBase
     public async Task<ActionResult<ModuleLessonDto>> AddLesson(int id, CreateModuleLessonDto dto)
         => Ok(await _courses.AddLessonAsync(id, dto, CurrentUserId, IsAdmin));
 
+    [HttpPut("{id:int}/lessons/{lessonId:int}")]
+    [Authorize(Roles = AppRoles.ContentManagers)]
+    public async Task<ActionResult<ModuleLessonDto>> UpdateLesson(int id, int lessonId, CreateModuleLessonDto dto)
+        => OkOrNotFound(await _courses.UpdateLessonAsync(id, lessonId, dto, CurrentUserId, IsAdmin));
+
+    [HttpDelete("{id:int}/lessons/{lessonId:int}")]
+    [Authorize(Roles = AppRoles.ContentManagers)]
+    public async Task<IActionResult> DeleteLesson(int id, int lessonId)
+        => NoContentOrNotFound(await _courses.DeleteLessonAsync(id, lessonId, CurrentUserId, IsAdmin));
+
     [HttpPost("{id:int}/enroll")]
     [Authorize]
     public async Task<ActionResult<UserModuleProgressDto>> Enroll(int id) => Ok(await _courses.EnrollAsync(id, CurrentUserId));
@@ -85,6 +95,15 @@ public class AssessmentsController : ApiControllerBase
         var created = await _assessments.CreateAsync(dto);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
+
+    [HttpPut("{id:int}")]
+    [Authorize(Roles = AppRoles.Admin)]
+    public async Task<ActionResult<SkillAssessmentDto>> Update(int id, CreateSkillAssessmentDto dto)
+        => OkOrNotFound(await _assessments.UpdateAsync(id, dto));
+
+    [HttpDelete("{id:int}")]
+    [Authorize(Roles = AppRoles.Admin)]
+    public async Task<IActionResult> Delete(int id) => NoContentOrNotFound(await _assessments.DeleteAsync(id));
 
     [HttpPost("{id:int}/questions")]
     [Authorize(Roles = AppRoles.Admin)]

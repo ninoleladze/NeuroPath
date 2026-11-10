@@ -31,6 +31,10 @@ public class UsersController : ApiControllerBase
     public async Task<IActionResult> UpdateSettings(UpdateSettingsDto dto)
         => NoContentOrNotFound(await _users.UpdateSettingsAsync(CurrentUserId, dto));
 
+    [HttpDelete("me")]
+    public async Task<IActionResult> DeleteMe(DeleteAccountDto dto)
+        => NoContentOrNotFound(await _users.DeleteAccountAsync(CurrentUserId, dto.Password));
+
     [HttpGet]
     [Authorize(Roles = AppRoles.Admin)]
     public async Task<ActionResult<List<UserDto>>> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
